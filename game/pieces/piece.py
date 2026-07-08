@@ -5,13 +5,15 @@ EMPTY_SQUARE = "."
 
 class Piece(ABC):
     """Base class for a piece type. A subclass defines the letter used in
-    board tokens (e.g. "K") and its movement shape. Adding a new piece type
-    means adding a new subclass here - nothing else in the engine changes."""
+    board tokens (e.g. "K"), its movement shape, and its travel speed.
+    Adding a new piece type means adding a new subclass here - nothing
+    else in the engine changes."""
 
     letter = None
+    speed_ms_per_cell = 1000
 
     @abstractmethod
-    def can_move(self, d_row, d_col):
+    def can_move(self, d_row, d_col, color):
         """Whether a move with these row/col deltas matches this piece's shape."""
 
     def is_path_clear(self, start, end, board):
@@ -19,9 +21,17 @@ class Piece(ABC):
         Non-sliding pieces (king, knight, pawn) keep the default: no blockers."""
         return True
 
+    def travel_time(self, start, end):
+        """How many ms this piece takes to travel from start to end."""
+        return chebyshev_distance(start, end) * self.speed_ms_per_cell
+
 
 def _sign(n):
     return (n > 0) - (n < 0)
+
+
+def chebyshev_distance(start, end):
+    return max(abs(end[0] - start[0]), abs(end[1] - start[1]))
 
 
 def sliding_path_is_clear(start, end, board):

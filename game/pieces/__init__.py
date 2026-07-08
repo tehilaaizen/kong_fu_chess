@@ -36,3 +36,7 @@ def is_legal_move(start, end, piece_type, board, color):
         return False
 
     return piece.is_path_clear(start, end, board)
+
+
+def travel_time(piece_type, start, end):
+    return PIECE_TYPES[piece_type].travel_time(start, end)
