@@ -14,6 +14,9 @@ class Board:
     def height(self):
         return len(self.rows)
 
+    def token_at(self, row, col):
+        return self.rows[row][col]
+
     def validate(self):
         if not self.rows:
             raise BoardValidationError(EMPTY_BOARD)

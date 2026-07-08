@@ -2,11 +2,11 @@ from pieces.bishop import Bishop
 from pieces.king import King
 from pieces.knight import Knight
 from pieces.pawn import Pawn
+from pieces.piece import EMPTY_SQUARE
 from pieces.queen import Queen
 from pieces.rook import Rook
 
 VALID_COLORS = {"w", "b"}
-EMPTY_SQUARE = "."
 
 PIECE_TYPES = {piece.letter: piece for piece in (King(), Queen(), Rook(), Bishop(), Knight(), Pawn())}
 
@@ -21,7 +21,7 @@ def is_valid_token(token):
     return token[0] in VALID_COLORS and token[1] in PIECE_TYPES
 
 
-def is_legal_move(start, end, piece_type):
+def is_legal_move(start, end, piece_type, board):
     if start == end:
         return False
 
@@ -32,4 +32,7 @@ def is_legal_move(start, end, piece_type):
     d_row = abs(end[0] - start[0])
     d_col = abs(end[1] - start[1])
 
-    return piece.can_move(d_row, d_col)
+    if not piece.can_move(d_row, d_col):
+        return False
+
+    return piece.is_path_clear(start, end, board)
