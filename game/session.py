@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from pieces import EMPTY_SQUARE, is_legal_move, travel_time
+from pieces.king import King
 
 CELL_SIZE = 100
 
@@ -22,6 +23,7 @@ class GameSession:
         self.selected_cell = None
         self.clock_ms = 0
         self.pending_moves = []
+        self.game_over = False
 
     def advance_clock(self, ms):
         self.clock_ms += ms
@@ -29,6 +31,9 @@ class GameSession:
 
     def click(self, x, y):
         self._settle_pending_moves()
+
+        if self.game_over:
+            return
 
         if self.pending_moves:
             return  # the common route is occupied - no clicks accepted until it clears
@@ -70,6 +75,10 @@ class GameSession:
             if move.arrival_time > self.clock_ms:
                 still_pending.append(move)
                 continue
+
+            captured = self.board.token_at(*move.destination)
+            if captured != EMPTY_SQUARE and captured[1] == King.letter:
+                self.game_over = True
 
             self.board.rows[move.destination[0]][move.destination[1]] = move.token
             self.board.rows[move.source[0]][move.source[1]] = EMPTY_SQUARE
