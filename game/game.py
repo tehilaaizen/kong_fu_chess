@@ -1,3 +1,5 @@
+# Repo: https://github.com/tehilaaizen/kong_fu_chess
+
 import sys
 
 from board import Board

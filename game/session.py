@@ -1,3 +1,4 @@
+from pieces.movement import is_legal_move
 from pieces.tokens import EMPTY_SQUARE
 
 CELL_SIZE = 100
@@ -35,6 +36,9 @@ class GameSession:
             self.selected_cell = (row, col)
             return
 
-        self.board.rows[row][col] = selected_token
-        self.board.rows[sel_row][sel_col] = EMPTY_SQUARE
+        piece_type = selected_token[1]
+        if is_legal_move((sel_row, sel_col), (row, col), piece_type):
+            self.board.rows[row][col] = selected_token
+            self.board.rows[sel_row][sel_col] = EMPTY_SQUARE
+
         self.selected_cell = None
