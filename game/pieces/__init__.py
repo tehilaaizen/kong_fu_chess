@@ -21,7 +21,7 @@ def is_valid_token(token):
     return token[0] in VALID_COLORS and token[1] in PIECE_TYPES
 
 
-def is_legal_move(start, end, piece_type, board):
+def is_legal_move(start, end, piece_type, board, color):
     if start == end:
         return False
 
@@ -29,10 +29,10 @@ def is_legal_move(start, end, piece_type, board):
     if piece is None:
         return False
 
-    d_row = abs(end[0] - start[0])
-    d_col = abs(end[1] - start[1])
+    d_row = end[0] - start[0]
+    d_col = end[1] - start[1]
 
-    if not piece.can_move(d_row, d_col):
+    if not piece.can_move(d_row, d_col, color):
         return False
 
     return piece.is_path_clear(start, end, board)

@@ -4,7 +4,7 @@ from pieces.piece import Piece, sliding_path_is_clear
 class Rook(Piece):
     letter = "R"
 
-    def can_move(self, d_row, d_col):
+    def can_move(self, d_row, d_col, color):
         return d_row == 0 or d_col == 0
 
     def is_path_clear(self, start, end, board):

@@ -36,7 +36,8 @@ class GameSession:
             return
 
         piece_type = selected_token[1]
-        if is_legal_move((sel_row, sel_col), (row, col), piece_type, self.board):
+        color = selected_token[0]
+        if is_legal_move((sel_row, sel_col), (row, col), piece_type, self.board, color):
             self.board.rows[row][col] = selected_token
             self.board.rows[sel_row][sel_col] = EMPTY_SQUARE
 
