@@ -30,13 +30,13 @@ class GameSession:
     def click(self, x, y):
         self._settle_pending_moves()
 
+        if self.pending_moves:
+            return  # the common route is occupied - no clicks accepted until it clears
+
         row, col = y // CELL_SIZE, x // CELL_SIZE
 
         if not (0 <= row < self.board.height and 0 <= col < self.board.width):
             return
-
-        if (row, col) in self._busy_cells():
-            return  # a piece mid-move can't be reselected or redirected
 
         clicked_token = self.board.rows[row][col]
 
@@ -58,9 +58,6 @@ class GameSession:
             self._schedule_move((sel_row, sel_col), (row, col), selected_token)
 
         self.selected_cell = None
-
-    def _busy_cells(self):
-        return {move.source for move in self.pending_moves}
 
     def _schedule_move(self, source, destination, token):
         duration = travel_time(token[1], source, destination)
