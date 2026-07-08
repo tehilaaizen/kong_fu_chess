@@ -35,8 +35,15 @@ def is_legal_move(start, end, piece_type, board, color):
     if not piece.can_move(d_row, d_col, color):
         return False
 
-    return piece.is_path_clear(start, end, board)
+    return piece.is_path_clear(start, end, board, color)
 
 
 def travel_time(piece_type, start, end):
     return PIECE_TYPES[piece_type].travel_time(start, end)
+
+
+def settle_token(piece_type, color, position, board):
+    """The token a piece becomes once it arrives at position (e.g. a pawn
+    reaching the last row becomes a queen); unchanged for every other case."""
+    new_letter = PIECE_TYPES[piece_type].on_arrival(position, board, color)
+    return color + (new_letter if new_letter is not None else piece_type)

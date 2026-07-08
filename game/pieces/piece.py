@@ -16,10 +16,15 @@ class Piece(ABC):
     def can_move(self, d_row, d_col, color):
         """Whether a move with these row/col deltas matches this piece's shape."""
 
-    def is_path_clear(self, start, end, board):
+    def is_path_clear(self, start, end, board, color):
         """Whether the squares strictly between start and end are empty.
-        Non-sliding pieces (king, knight, pawn) keep the default: no blockers."""
+        Non-sliding pieces (king, knight) keep the default: no blockers."""
         return True
+
+    def on_arrival(self, position, board, color):
+        """Hook for piece-specific end-of-move effects (e.g. pawn promotion).
+        Returns the new letter this piece becomes, or None to stay the same."""
+        return None
 
     def travel_time(self, start, end):
         """How many ms this piece takes to travel from start to end."""

@@ -13,5 +13,5 @@ class Queen(Piece):
     def can_move(self, d_row, d_col, color):
         return self._rook.can_move(d_row, d_col, color) or self._bishop.can_move(d_row, d_col, color)
 
-    def is_path_clear(self, start, end, board):
+    def is_path_clear(self, start, end, board, color):
         return sliding_path_is_clear(start, end, board)

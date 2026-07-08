@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from pieces import EMPTY_SQUARE, is_legal_move, travel_time
+from pieces import EMPTY_SQUARE, is_legal_move, settle_token, travel_time
 from pieces.king import King
 
 CELL_SIZE = 100
@@ -80,7 +80,10 @@ class GameSession:
             if captured != EMPTY_SQUARE and captured[1] == King.letter:
                 self.game_over = True
 
-            self.board.rows[move.destination[0]][move.destination[1]] = move.token
+            color, piece_type = move.token[0], move.token[1]
+            final_token = settle_token(piece_type, color, move.destination, self.board)
+
+            self.board.rows[move.destination[0]][move.destination[1]] = final_token
             self.board.rows[move.source[0]][move.source[1]] = EMPTY_SQUARE
 
         self.pending_moves = still_pending
