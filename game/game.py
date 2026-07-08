@@ -1,9 +1,8 @@
 import sys
 
 from board import Board
-from commands import execute_commands
+from commands import execute_commands, parse_sections
 from errors import BoardValidationError
-from input_parser import parse_sections
 
 
 def main():
