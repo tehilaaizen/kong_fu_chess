@@ -1,5 +1,5 @@
 from errors import BoardValidationError, ROW_WIDTH_MISMATCH, UNKNOWN_TOKEN, EMPTY_BOARD
-from pieces.tokens import is_valid_token
+from pieces import is_valid_token
 
 
 class Board:

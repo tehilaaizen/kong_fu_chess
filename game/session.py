@@ -1,5 +1,4 @@
-from pieces.movement import is_legal_move
-from pieces.tokens import EMPTY_SQUARE
+from pieces import EMPTY_SQUARE, is_legal_move
 
 CELL_SIZE = 100
 
