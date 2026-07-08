@@ -28,17 +28,48 @@ def parse_sections(lines):
     return board_rows, commands
 
 
-def _print_board(board):
-    print(board.to_text())
+def _cmd_print(args, session):
+    if args == ["board"]:
+        print(session.board.to_text())
+
+
+def _cmd_click(args, session):
+    if len(args) != 2:
+        return
+
+    try:
+        x, y = int(args[0]), int(args[1])
+    except ValueError:
+        return
+
+    session.click(x, y)
+
+
+def _cmd_wait(args, session):
+    if len(args) != 1:
+        return
+
+    try:
+        ms = int(args[0])
+    except ValueError:
+        return
+
+    session.advance_clock(ms)
 
 
 COMMAND_HANDLERS = {
-    "print board": _print_board,
+    "print": _cmd_print,
+    "click": _cmd_click,
+    "wait": _cmd_wait,
 }
 
 
-def execute_commands(commands, board):
+def execute_commands(commands, session):
     for command in commands:
-        handler = COMMAND_HANDLERS.get(command)
+        tokens = command.split()
+        if not tokens:
+            continue
+
+        handler = COMMAND_HANDLERS.get(tokens[0])
         if handler:
-            handler(board)
+            handler(tokens[1:], session)
