@@ -4,6 +4,7 @@ from pieces import EMPTY_SQUARE, is_legal_move, settle_token, travel_time
 from pieces.king import King
 
 CELL_SIZE = 100
+JUMP_DURATION_MS = 1000
 
 
 @dataclass
@@ -14,23 +15,33 @@ class PendingMove:
     arrival_time: int
 
 
+@dataclass
+class Jump:
+    cell: tuple
+    until_time: int
+
+
 class GameSession:
     """The live, mutable state of one game: the board, the current
-    selection, the game clock, and any moves still travelling."""
+    selection, the game clock, moves still travelling, and pieces airborne
+    from a jump."""
 
     def __init__(self, board):
         self.board = board
         self.selected_cell = None
         self.clock_ms = 0
         self.pending_moves = []
+        self.jumps = []
         self.game_over = False
 
     def advance_clock(self, ms):
         self.clock_ms += ms
         self._settle_pending_moves()
+        self._expire_jumps()
 
     def click(self, x, y):
         self._settle_pending_moves()
+        self._expire_jumps()
 
         if self.game_over:
             return
@@ -64,6 +75,37 @@ class GameSession:
 
         self.selected_cell = None
 
+    def jump(self, x, y):
+        self._settle_pending_moves()
+        self._expire_jumps()
+
+        if self.game_over or self.pending_moves:
+            return  # a moving piece cannot jump
+
+        row, col = y // CELL_SIZE, x // CELL_SIZE
+
+        if not (0 <= row < self.board.height and 0 <= col < self.board.width):
+            return
+
+        cell = (row, col)
+
+        if self.board.token_at(row, col) == EMPTY_SQUARE:
+            return  # a captured (or nonexistent) piece cannot jump
+
+        if self._is_airborne(cell):
+            return
+
+        self.jumps.append(Jump(cell, self.clock_ms + JUMP_DURATION_MS))
+
+    def _is_airborne(self, cell):
+        return any(jump.cell == cell for jump in self.jumps)
+
+    def _clear_airborne(self, cell):
+        self.jumps = [jump for jump in self.jumps if jump.cell != cell]
+
+    def _expire_jumps(self):
+        self.jumps = [jump for jump in self.jumps if jump.until_time > self.clock_ms]
+
     def _schedule_move(self, source, destination, token):
         duration = travel_time(token[1], source, destination)
         self.pending_moves.append(PendingMove(source, destination, token, self.clock_ms + duration))
@@ -74,6 +116,12 @@ class GameSession:
         for move in self.pending_moves:
             if move.arrival_time > self.clock_ms:
                 still_pending.append(move)
+                continue
+
+            if self._is_airborne(move.destination):
+                # the airborne defender destroys the arriving piece and stays put
+                self._clear_airborne(move.destination)
+                self.board.rows[move.source[0]][move.source[1]] = EMPTY_SQUARE
                 continue
 
             captured = self.board.token_at(*move.destination)

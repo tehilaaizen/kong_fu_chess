@@ -57,10 +57,23 @@ def _cmd_wait(args, session):
     session.advance_clock(ms)
 
 
+def _cmd_jump(args, session):
+    if len(args) != 2:
+        return
+
+    try:
+        x, y = int(args[0]), int(args[1])
+    except ValueError:
+        return
+
+    session.jump(x, y)
+
+
 COMMAND_HANDLERS = {
     "print": _cmd_print,
     "click": _cmd_click,
     "wait": _cmd_wait,
+    "jump": _cmd_jump,
 }
 
 
