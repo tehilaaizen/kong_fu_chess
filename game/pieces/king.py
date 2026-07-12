@@ -1,7 +1,7 @@
-from pieces.piece import Piece
+from pieces.piece import PieceRules
 
 
-class King(Piece):
+class King(PieceRules):
     letter = "K"
 
     def can_move(self, d_row, d_col, color):

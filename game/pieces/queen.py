@@ -1,9 +1,9 @@
 from pieces.bishop import Bishop
-from pieces.piece import Piece, sliding_path_is_clear
+from pieces.piece import PieceRules, sliding_path_is_clear
 from pieces.rook import Rook
 
 
-class Queen(Piece):
+class Queen(PieceRules):
     letter = "Q"
 
     def __init__(self):

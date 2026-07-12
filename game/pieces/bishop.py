@@ -1,7 +1,7 @@
-from pieces.piece import Piece, sliding_path_is_clear
+from pieces.piece import PieceRules, sliding_path_is_clear
 
 
-class Bishop(Piece):
+class Bishop(PieceRules):
     letter = "B"
 
     def can_move(self, d_row, d_col, color):

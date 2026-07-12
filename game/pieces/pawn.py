@@ -1,4 +1,4 @@
-from pieces.piece import EMPTY_SQUARE, Piece
+from pieces.piece import EMPTY_SQUARE, PieceRules
 from pieces.queen import Queen
 
 FORWARD_DIRECTION = {"w": -1, "b": 1}
@@ -12,7 +12,7 @@ def _promotion_row(color, height):
     return height - 1 if FORWARD_DIRECTION[color] == 1 else 0
 
 
-class Pawn(Piece):
+class Pawn(PieceRules):
     letter = "P"
 
     def can_move(self, d_row, d_col, color):

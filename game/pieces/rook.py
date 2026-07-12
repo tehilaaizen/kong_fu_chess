@@ -1,7 +1,7 @@
-from pieces.piece import Piece, sliding_path_is_clear
+from pieces.piece import PieceRules, sliding_path_is_clear
 
 
-class Rook(Piece):
+class Rook(PieceRules):
     letter = "R"
 
     def can_move(self, d_row, d_col, color):

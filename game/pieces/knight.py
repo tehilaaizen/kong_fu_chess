@@ -1,7 +1,7 @@
-from pieces.piece import Piece
+from pieces.piece import PieceRules
 
 
-class Knight(Piece):
+class Knight(PieceRules):
     letter = "N"
 
     def can_move(self, d_row, d_col, color):

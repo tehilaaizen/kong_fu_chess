@@ -3,11 +3,14 @@ from abc import ABC, abstractmethod
 EMPTY_SQUARE = "."
 
 
-class Piece(ABC):
-    """Base class for a piece type. A subclass defines the letter used in
-    board tokens (e.g. "K"), its movement shape, and its travel speed.
-    Adding a new piece type means adding a new subclass here - nothing
-    else in the engine changes."""
+class PieceRules(ABC):
+    """Stateless movement-rule strategy for one piece kind (one instance per
+    kind, shared by every piece of that kind on the board - not to be
+    confused with model.piece.Piece, which is one instance per actual piece
+    sitting on the board). A subclass defines the letter used in board
+    tokens (e.g. "K"), its movement shape, and its travel speed. Adding a
+    new piece type means adding a new subclass here - nothing else in the
+    engine changes."""
 
     letter = None
     speed_ms_per_cell = 1000
