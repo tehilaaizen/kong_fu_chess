@@ -11,7 +11,10 @@ class BoardParser:
     from the validation logic that used to live on Board itself."""
 
     @staticmethod
-    def parse(text):
+    def parse(text: str) -> Board:
+        """Validate board notation text and build the Board it describes.
+        Raises BoardValidationError for an empty board, inconsistent row
+        widths, or an unknown token."""
         rows = [line.split() for line in text.splitlines() if line.strip()]
 
         if not rows:
@@ -29,7 +32,9 @@ class BoardParser:
         return BoardParser._build_board(rows, width)
 
     @staticmethod
-    def _build_board(rows, width):
+    def _build_board(rows: list[list[str]], width: int) -> Board:
+        """Turn already-validated token rows into a Board, assigning each
+        non-empty token a stable, incrementing piece id."""
         board = Board(width=width, height=len(rows))
 
         next_id = 0

@@ -1,11 +1,13 @@
+from session import GameSession
+
 BOARD_MARKER = "Board:"
 COMMANDS_MARKER = "Commands:"
 
 
-def parse_sections(lines):
+def parse_sections(lines: list[str]) -> tuple[list[list[str]], list[str]]:
     """Splits raw fixture lines into (board_rows, command_lines)."""
-    board_rows = []
-    commands = []
+    board_rows: list[list[str]] = []
+    commands: list[str] = []
     in_board = False
 
     for line in lines:
@@ -28,12 +30,14 @@ def parse_sections(lines):
     return board_rows, commands
 
 
-def _cmd_print(args, session):
+def _cmd_print(args: list[str], session: GameSession) -> None:
+    """Handle `print board`: print the session's board as text."""
     if args == ["board"]:
         print(session.board.to_text())
 
 
-def _cmd_click(args, session):
+def _cmd_click(args: list[str], session: GameSession) -> None:
+    """Handle `click <x> <y>`: forward the pixel coordinates to the session."""
     if len(args) != 2:
         return
 
@@ -45,7 +49,8 @@ def _cmd_click(args, session):
     session.click(x, y)
 
 
-def _cmd_wait(args, session):
+def _cmd_wait(args: list[str], session: GameSession) -> None:
+    """Handle `wait <ms>`: advance the session's simulated clock."""
     if len(args) != 1:
         return
 
@@ -57,7 +62,8 @@ def _cmd_wait(args, session):
     session.advance_clock(ms)
 
 
-def _cmd_jump(args, session):
+def _cmd_jump(args: list[str], session: GameSession) -> None:
+    """Handle `jump <x> <y>`: forward the pixel coordinates to the session."""
     if len(args) != 2:
         return
 
@@ -77,7 +83,9 @@ COMMAND_HANDLERS = {
 }
 
 
-def execute_commands(commands, session):
+def execute_commands(commands: list[str], session: GameSession) -> None:
+    """Run each command line against session, in order, dispatching
+    through COMMAND_HANDLERS by its first token."""
     for command in commands:
         tokens = command.split()
         if not tokens:

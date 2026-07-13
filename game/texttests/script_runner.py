@@ -1,3 +1,4 @@
+from model.board import Board
 from text_io.board_parser import BoardParser
 from text_io.board_printer import BoardPrinter
 from texttests.script_parser import parse_script
@@ -10,7 +11,7 @@ class ScriptAssertionError(AssertionError):
     the expected rows embedded in the script."""
 
 
-def run_script(text):
+def run_script(text: str) -> None:
     """Executes a .kfc integration-test script, asserting every `print
     board` against the expected rows that follow it in the script."""
     board_text, command_blocks = parse_script(text)
@@ -20,7 +21,9 @@ def run_script(text):
         _run_block(lines, board)
 
 
-def _run_block(lines, board):
+def _run_block(lines: list[str], board: Board) -> None:
+    """Execute one command block's lines in order. Currently only
+    `print board` (plus its embedded expected rows) is supported."""
     index = 0
 
     while index < len(lines):
@@ -35,7 +38,9 @@ def _run_block(lines, board):
         raise ValueError(f"unsupported command: {line!r}")
 
 
-def _assert_board_matches(board, expected_rows):
+def _assert_board_matches(board: Board, expected_rows: list[str]) -> None:
+    """Raise ScriptAssertionError if board's printed text doesn't match
+    expected_rows exactly."""
     actual = BoardPrinter.to_text(board)
     expected = "\n".join(expected_rows)
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from board import Board
 from pieces import EMPTY_SQUARE, is_legal_move, settle_token, travel_time
 from pieces.king import King
 
@@ -9,6 +10,9 @@ JUMP_DURATION_MS = 1000
 
 @dataclass
 class PendingMove:
+    """A move that has been requested and validated but not yet applied to
+    the board - it takes effect once the game clock reaches arrival_time."""
+
     source: tuple
     destination: tuple
     token: str
@@ -17,6 +21,8 @@ class PendingMove:
 
 @dataclass
 class Jump:
+    """A piece temporarily "airborne" after a jump command, until until_time."""
+
     cell: tuple
     until_time: int
 
@@ -26,20 +32,24 @@ class GameSession:
     selection, the game clock, moves still travelling, and pieces airborne
     from a jump."""
 
-    def __init__(self, board):
+    def __init__(self, board: Board) -> None:
         self.board = board
-        self.selected_cell = None
+        self.selected_cell: tuple | None = None
         self.clock_ms = 0
-        self.pending_moves = []
-        self.jumps = []
+        self.pending_moves: list[PendingMove] = []
+        self.jumps: list[Jump] = []
         self.game_over = False
 
-    def advance_clock(self, ms):
+    def advance_clock(self, ms: int) -> None:
+        """Advance the simulated clock by ms, settling any moves that have
+        now arrived and expiring any jumps that have now landed."""
         self.clock_ms += ms
         self._settle_pending_moves()
         self._expire_jumps()
 
-    def click(self, x, y):
+    def click(self, x: int, y: int) -> None:
+        """Handle a click in pixel coordinates: select a piece, switch
+        selection to another friendly piece, or request a move."""
         self._settle_pending_moves()
         self._expire_jumps()
 
@@ -75,7 +85,10 @@ class GameSession:
 
         self.selected_cell = None
 
-    def jump(self, x, y):
+    def jump(self, x: int, y: int) -> None:
+        """Handle a jump command in pixel coordinates: make the clicked
+        piece briefly airborne, so an incoming attacker that arrives during
+        the jump is destroyed instead of capturing it."""
         self._settle_pending_moves()
         self._expire_jumps()
 
@@ -97,21 +110,28 @@ class GameSession:
 
         self.jumps.append(Jump(cell, self.clock_ms + JUMP_DURATION_MS))
 
-    def _is_airborne(self, cell):
+    def _is_airborne(self, cell: tuple) -> bool:
+        """Whether cell currently holds a piece mid-jump."""
         return any(jump.cell == cell for jump in self.jumps)
 
-    def _clear_airborne(self, cell):
+    def _clear_airborne(self, cell: tuple) -> None:
+        """Remove any jump record for cell (it has just been resolved)."""
         self.jumps = [jump for jump in self.jumps if jump.cell != cell]
 
-    def _expire_jumps(self):
+    def _expire_jumps(self) -> None:
+        """Drop jumps whose airborne window has passed."""
         self.jumps = [jump for jump in self.jumps if jump.until_time > self.clock_ms]
 
-    def _schedule_move(self, source, destination, token):
+    def _schedule_move(self, source: tuple, destination: tuple, token: str) -> None:
+        """Queue a validated move to be applied once its travel time elapses."""
         duration = travel_time(token[1], source, destination)
         self.pending_moves.append(PendingMove(source, destination, token, self.clock_ms + duration))
 
-    def _settle_pending_moves(self):
-        still_pending = []
+    def _settle_pending_moves(self) -> None:
+        """Apply every pending move whose arrival_time has passed: resolve
+        jump-collisions, capture (ending the game on a king capture), and
+        update board occupancy."""
+        still_pending: list[PendingMove] = []
 
         for move in self.pending_moves:
             if move.arrival_time > self.clock_ms:

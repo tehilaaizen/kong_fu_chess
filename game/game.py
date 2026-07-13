@@ -8,7 +8,10 @@ from errors import BoardValidationError
 from session import GameSession
 
 
-def main():
+def main() -> None:
+    """Read a Board:/Commands: script from stdin, validate the board, and
+    execute its commands - printing `ERROR <code>` instead if the board
+    text is malformed."""
     lines = [line.strip() for line in sys.stdin.read().splitlines()]
     board_rows, commands = parse_sections(lines)
     board = Board(board_rows)
