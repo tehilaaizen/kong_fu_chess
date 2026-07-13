@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+from model.position import Position
+
 EMPTY_SQUARE = "."
 
 
@@ -55,3 +57,30 @@ def sliding_path_is_clear(start, end, board):
         row, col = row + row_step, col + col_step
 
     return True
+
+
+def sliding_destinations(board, cell, color, directions):
+    """Shared by any PieceRules.legal_destinations that slides in straight
+    lines (rook/bishop/queen): for each direction, walks cell by cell,
+    collecting empty squares, then the first enemy-occupied square
+    (capture-eligible) before stopping - never crossing any occupied
+    square."""
+    destinations = set()
+
+    for d_row, d_col in directions:
+        position = Position(cell.row + d_row, cell.col + d_col)
+
+        while board.in_bounds(position):
+            occupant = board.piece_at(position)
+
+            if occupant is None:
+                destinations.add(position)
+            elif occupant.color != color:
+                destinations.add(position)
+                break
+            else:
+                break
+
+            position = Position(position.row + d_row, position.col + d_col)
+
+    return destinations
