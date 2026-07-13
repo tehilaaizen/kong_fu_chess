@@ -3,7 +3,7 @@ from model.board import Board
 from model.piece import Piece
 from model.position import Position
 from pieces.rook import Rook
-from realtime.real_time_arbiter import RealTimeArbiter
+from realtime.real_time_arbiter import ArrivalEvent, RealTimeArbiter
 from rules.rule_engine import ILLEGAL_PIECE_MOVE, OK, RuleEngine
 
 
@@ -21,11 +21,12 @@ class SpyRuleEngine:
 
 class SpyRealTimeArbiter:
     """Test double recording calls, and letting tests force
-    has_active_motion() - used to prove GameEngine delegates to it
-    correctly without touching Board itself."""
+    has_active_motion() and advance_time()'s return value - used to prove
+    GameEngine delegates to it correctly without touching Board itself."""
 
-    def __init__(self, has_active_motion: bool = False) -> None:
+    def __init__(self, has_active_motion: bool = False, events_to_return: list | None = None) -> None:
         self._has_active_motion = has_active_motion
+        self._events_to_return = events_to_return or []
         self.start_motion_calls: list[tuple] = []
         self.advance_time_calls: list[int] = []
 
@@ -37,7 +38,7 @@ class SpyRealTimeArbiter:
 
     def advance_time(self, ms: int) -> list:
         self.advance_time_calls.append(ms)
-        return []
+        return self._events_to_return
 
 
 def _engine():
@@ -119,3 +120,41 @@ def test_wait_delegates_to_real_time_arbiter_without_touching_board_directly():
     engine.wait(500)
 
     assert real_time_arbiter.advance_time_calls == [500]
+
+
+def test_capturing_the_king_ends_the_game():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    king = Piece(id=2, color="b", kind="K", cell=Position(0, 1))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=king)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
+
+    engine.wait(1000)
+
+    assert engine.is_game_over() is True
+
+
+def test_capturing_a_non_king_does_not_end_the_game():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    pawn = Piece(id=2, color="b", kind="P", cell=Position(0, 1))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=pawn)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
+
+    engine.wait(1000)
+
+    assert engine.is_game_over() is False
+
+
+def test_a_move_onto_an_empty_cell_does_not_end_the_game():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=None)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
+
+    engine.wait(1000)
+
+    assert engine.is_game_over() is False

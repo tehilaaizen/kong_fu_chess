@@ -1,5 +1,7 @@
 from model.board import Board
+from model.piece import Piece
 from model.position import Position
+from pieces.king import King
 from realtime.real_time_arbiter import RealTimeArbiter
 from rules.rule_engine import RuleEngine
 
@@ -70,5 +72,16 @@ class GameEngine:
     def wait(self, ms: int) -> None:
         """Advance simulated time by ms, delegating entirely to
         RealTimeArbiter - GameEngine never touches Board motion state
-        directly."""
-        self._real_time_arbiter.advance_time(ms)
+        directly. Ends the game if any arrival captured a king."""
+        events = self._real_time_arbiter.advance_time(ms)
+
+        for event in events:
+            if self._ends_the_game(event.captured_piece):
+                self.mark_game_over()
+
+    def _ends_the_game(self, captured_piece: Piece | None) -> bool:
+        """Whether capturing captured_piece ends the game. Only the king
+        does today; kept as its own method (rather than an inline check
+        scattered where captures are handled) so a different win
+        condition can replace just this method later."""
+        return captured_piece is not None and captured_piece.kind == King.letter

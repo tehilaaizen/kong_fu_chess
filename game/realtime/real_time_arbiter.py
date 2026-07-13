@@ -1,5 +1,5 @@
 from model.board import Board
-from model.piece import Piece
+from model.piece import CAPTURED, Piece
 from model.position import Position
 from realtime.motion import Motion
 
@@ -8,14 +8,17 @@ MS_PER_CELL = 1000
 
 class ArrivalEvent:
     """Reported by advance_time for each motion that logically arrived
-    during that step. A future iteration (captures/king-capture) extends
-    this with what, if anything, was captured - request_move/wait don't
-    need to change when that happens."""
+    during that step, including whatever piece it captured (None for a
+    move onto an empty cell) - GameEngine decides what, if anything, a
+    capture means (e.g. ending the game on a king capture)."""
 
-    def __init__(self, piece: Piece, source: Position, destination: Position) -> None:
+    def __init__(
+        self, piece: Piece, source: Position, destination: Position, captured_piece: Piece | None
+    ) -> None:
         self.piece = piece
         self.source = source
         self.destination = destination
+        self.captured_piece = captured_piece
 
 
 class RealTimeArbiter:
@@ -41,7 +44,9 @@ class RealTimeArbiter:
 
     def advance_time(self, ms: int) -> list[ArrivalEvent]:
         """Advance the simulated clock by ms, relocating on Board (and
-        reporting) every motion whose arrival time has now passed."""
+        reporting) every motion whose arrival time has now passed. A piece
+        already occupying the destination is captured: it is overwritten
+        on Board and its own state becomes CAPTURED."""
         self._clock_ms += ms
 
         arrived: list[Motion] = []
@@ -55,8 +60,13 @@ class RealTimeArbiter:
 
         events: list[ArrivalEvent] = []
         for motion in arrived:
+            captured_piece = self._board.piece_at(motion.destination)
             self._board.move_piece(motion.source, motion.destination)
-            events.append(ArrivalEvent(motion.piece, motion.source, motion.destination))
+
+            if captured_piece is not None:
+                captured_piece.state = CAPTURED
+
+            events.append(ArrivalEvent(motion.piece, motion.source, motion.destination, captured_piece))
 
         return events
 

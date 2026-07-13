@@ -1,5 +1,5 @@
 from model.board import Board
-from model.piece import Piece
+from model.piece import CAPTURED, Piece
 from model.position import Position
 from realtime.real_time_arbiter import RealTimeArbiter
 
@@ -49,6 +49,7 @@ def test_one_square_move_arrives_after_1000ms():
     assert events[0].piece is piece
     assert events[0].source == Position(0, 0)
     assert events[0].destination == Position(0, 1)
+    assert events[0].captured_piece is None
 
 
 def test_two_square_move_takes_2000ms_not_1000():
@@ -72,3 +73,16 @@ def test_partial_waits_accumulate_to_a_full_arrival():
 
     arbiter.advance_time(200)
     assert board.piece_at(Position(0, 1)) is piece
+
+
+def test_capturing_a_piece_removes_it_and_marks_it_captured():
+    arbiter, board, rook = _arbiter_with_rook_at(Position(0, 0))
+    enemy_king = Piece(id=2, color="b", kind="K", cell=Position(0, 1))
+    board.add_piece(enemy_king)
+
+    arbiter.start_motion(rook, Position(0, 0), Position(0, 1))
+    events = arbiter.advance_time(1000)
+
+    assert board.piece_at(Position(0, 1)) is rook
+    assert enemy_king.state == CAPTURED
+    assert events[0].captured_piece is enemy_king
