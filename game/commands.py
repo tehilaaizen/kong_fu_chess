@@ -1,12 +1,26 @@
-from session import GameSession
+from engine.game_engine import GameEngine
+from input.controller import Controller
+from model.board import Board
+from text_io.board_printer import BoardPrinter
 
 BOARD_MARKER = "Board:"
 COMMANDS_MARKER = "Commands:"
 
 
-def parse_sections(lines: list[str]) -> tuple[list[list[str]], list[str]]:
-    """Splits raw fixture lines into (board_rows, command_lines)."""
-    board_rows: list[list[str]] = []
+class CommandContext:
+    """Bundles the collaborators command handlers need, so
+    COMMAND_HANDLERS can share one dispatch signature without a god
+    object holding game logic itself."""
+
+    def __init__(self, board: Board, controller: Controller, game_engine: GameEngine) -> None:
+        self.board = board
+        self.controller = controller
+        self.game_engine = game_engine
+
+
+def parse_sections(lines: list[str]) -> tuple[str, list[str]]:
+    """Splits raw fixture lines into (board_text, command_lines)."""
+    board_lines: list[str] = []
     commands: list[str] = []
     in_board = False
 
@@ -23,21 +37,19 @@ def parse_sections(lines: list[str]) -> tuple[list[list[str]], list[str]]:
             continue
 
         if in_board:
-            board_rows.append(line.split())
+            board_lines.append(line)
         else:
             commands.append(line)
 
-    return board_rows, commands
+    return "\n".join(board_lines), commands
 
 
-def _cmd_print(args: list[str], session: GameSession) -> None:
-    """Handle `print board`: print the session's board as text."""
+def _cmd_print(args: list[str], context: CommandContext) -> None:
     if args == ["board"]:
-        print(session.board.to_text())
+        print(BoardPrinter.to_text(context.board))
 
 
-def _cmd_click(args: list[str], session: GameSession) -> None:
-    """Handle `click <x> <y>`: forward the pixel coordinates to the session."""
+def _cmd_click(args: list[str], context: CommandContext) -> None:
     if len(args) != 2:
         return
 
@@ -46,11 +58,10 @@ def _cmd_click(args: list[str], session: GameSession) -> None:
     except ValueError:
         return
 
-    session.click(x, y)
+    context.controller.click(x, y)
 
 
-def _cmd_wait(args: list[str], session: GameSession) -> None:
-    """Handle `wait <ms>`: advance the session's simulated clock."""
+def _cmd_wait(args: list[str], context: CommandContext) -> None:
     if len(args) != 1:
         return
 
@@ -59,11 +70,10 @@ def _cmd_wait(args: list[str], session: GameSession) -> None:
     except ValueError:
         return
 
-    session.advance_clock(ms)
+    context.game_engine.wait(ms)
 
 
-def _cmd_jump(args: list[str], session: GameSession) -> None:
-    """Handle `jump <x> <y>`: forward the pixel coordinates to the session."""
+def _cmd_jump(args: list[str], context: CommandContext) -> None:
     if len(args) != 2:
         return
 
@@ -72,7 +82,7 @@ def _cmd_jump(args: list[str], session: GameSession) -> None:
     except ValueError:
         return
 
-    session.jump(x, y)
+    context.controller.jump(x, y)
 
 
 COMMAND_HANDLERS = {
@@ -83,8 +93,8 @@ COMMAND_HANDLERS = {
 }
 
 
-def execute_commands(commands: list[str], session: GameSession) -> None:
-    """Run each command line against session, in order, dispatching
+def execute_commands(commands: list[str], context: CommandContext) -> None:
+    """Run each command line against context, in order, dispatching
     through COMMAND_HANDLERS by its first token."""
     for command in commands:
         tokens = command.split()
@@ -93,4 +103,4 @@ def execute_commands(commands: list[str], session: GameSession) -> None:
 
         handler = COMMAND_HANDLERS.get(tokens[0])
         if handler:
-            handler(tokens[1:], session)
+            handler(tokens[1:], context)
