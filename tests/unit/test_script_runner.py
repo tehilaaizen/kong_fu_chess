@@ -14,4 +14,4 @@ def test_raises_when_printed_board_does_not_match_expected_rows():
 
 def test_raises_on_an_unsupported_command():
     with pytest.raises(ValueError):
-        run_script("Board\n. . .\n. wK .\n\nclick 50 50")
+        run_script("Board\n. . .\n. wK .\n\njump 50 50")

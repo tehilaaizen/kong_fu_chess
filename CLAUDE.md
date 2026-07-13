@@ -61,3 +61,11 @@
 - **אסור** להשתמש ב-monkey patching בבדיקות (שינוי הקוד הנבדק בזמן ריצה). יש להשתמש ב-Dependency Injection או בדרכים מקובלות אחרות להזרקת תלויות/הדמיה (mocking) לצורך בדיקה.
 - **בלי sleep אמיתי בבדיקות** — זמן מדומה מתקדם רק דרך `wait(ms)`/`advance_time(ms)` (ראו [design guide §10](kung_fu_chess_design_guide.md#10-real-time-movement-design)), לעולם לא `time.sleep`.
 - **שני סוגי בדיקות, לא רק אחד** — unit tests לכל שכבה בבידוד (טבלת אחריות מדויקת ב-[design guide §16](kung_fu_chess_design_guide.md#16-unit-test-layers)), **וגם** בדיקות אינטגרציה טקסטואליות דרך ה-DSL המצומצם (`Board` / `click` / `wait` / `print board` בלבד — ראו [design guide §13](kung_fu_chess_design_guide.md#13-text-based-integration-test-language)). אסור להוסיף פקודות DSL נוספות למסלול הבסיסי, ואסור ש-runner הבדיקות יעקוף את השכבות (למשל קריאה ישירה ל-`Board.move_piece`).
+
+## 8. Type Hints ו-Documentation — מכאן והלאה, בכל קוד חדש/נערך
+
+- **כל פונקציה/מתודה חדשה** (וכל קובץ קיים שנוגעים בו) מקבלת type hints מלאים על פרמטרים וערך החזרה (תחביר Python 3.12: `list[str]`, `dict[str, X]`, `X | None` וכו', בלי `typing.Optional`/`typing.List` הישנים).
+- **כל פונקציה/מתודה** מקבלת docstring קצר שמסביר מה היא עושה — גם אם ברור משם המשתנים, בניגוד לעיקרון "בלי הערות מיותרות" הכללי; כאן זו דרישת פרויקט מפורשת שגוברת עליו.
+- **תלות מוזרקת (DI) שממומשת ע"י כמה מחלקות לא-קשורות** (כמו `game_engine` שמקבל גם `GameEngine` אמיתי וגם fake בטסטים) — מטופסים ב-`typing.Protocol` ממוקם ליד הצרכן (למשל `RequestsMoves` ב-`input/controller.py`), לא ב-import ישיר של מחלקה קונקרטית אחת.
+- **קוד ישן מול חדש שחולקים מושג דומה בשם שונה** (כמו ה-`Board` הישן מבוסס-tokens מול `model.board.Board` החדש) — כשצריך type hint לצד הישן בלי ליצור תלות "קשה" בקוד שעתיד להימחק, אפשר Protocol מצומצם (כמו `TokenBoard` ב-`pieces/piece.py`) שמתאר רק את מה שבאמת נדרש.
+- קבצי טסטים (`tests/*.py`) פטורים מ-docstrings — שם שם הפונקציה כבר משמש כתיעוד (מוסכמת pytest), אבל עדיין כדאי type hints היכן שזה משפר קריאות.
