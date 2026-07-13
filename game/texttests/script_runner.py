@@ -11,6 +11,7 @@ from texttests.script_parser import parse_script
 PRINT_BOARD_COMMAND = "print board"
 CLICK_COMMAND = "click"
 WAIT_COMMAND = "wait"
+JUMP_COMMAND = "jump"
 
 
 class ScriptAssertionError(AssertionError):
@@ -57,6 +58,11 @@ def _run_block(lines: list[str], board: Board, controller: Controller, game_engi
 
         if tokens[0] == WAIT_COMMAND and len(tokens) == 2:
             game_engine.wait(int(tokens[1]))
+            index += 1
+            continue
+
+        if tokens[0] == JUMP_COMMAND and len(tokens) == 3:
+            controller.jump(int(tokens[1]), int(tokens[2]))
             index += 1
             continue
 

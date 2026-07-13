@@ -55,6 +55,15 @@ class PieceRules(ABC):
         Returns the new letter this piece becomes, or None to stay the same."""
         return None
 
+    def on_piece_arrival(self, board: Board, piece: Piece) -> None:
+        """Optional hook for piece-specific post-arrival effects (e.g. pawn
+        promotion) in the new model-based pipeline - mutates piece in
+        place; default is a no-op. Not the same method as on_arrival
+        above (different signature, different pipeline); kept as two
+        distinct hooks so migrating one pipeline never silently breaks
+        the other."""
+        return None
+
     def travel_time(self, start: tuple[int, int], end: tuple[int, int]) -> int:
         """How many ms this piece takes to travel from start to end."""
         return chebyshev_distance(start, end) * self.speed_ms_per_cell

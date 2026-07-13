@@ -3,10 +3,12 @@ from model.piece import Piece
 from model.position import Position
 from pieces.king import King
 from realtime.real_time_arbiter import RealTimeArbiter
-from rules.rule_engine import RuleEngine
+from rules.rule_engine import OK, RuleEngine
 
 GAME_OVER = "game_over"
 MOTION_IN_PROGRESS = "motion_in_progress"
+EMPTY_CELL = "empty_cell"
+ALREADY_AIRBORNE = "already_airborne"
 
 
 class MoveResult:
@@ -68,6 +70,30 @@ class GameEngine:
         self._real_time_arbiter.start_motion(piece, source, destination)
 
         return MoveResult(True, validation.reason)
+
+    def request_jump(self, position: Position) -> MoveResult:
+        """Request the piece at position to jump (become briefly
+        airborne): while airborne, an attacker arriving there is
+        destroyed instead of capturing it. Unlike request_move, this
+        never consults RuleEngine - a jump isn't a chess move, so there's
+        no destination-legality question, only the same application-level
+        guards (game_over, motion_in_progress) plus jump-specific ones."""
+        if self.is_game_over():
+            return MoveResult(False, GAME_OVER)
+
+        if self._real_time_arbiter.has_active_motion():
+            return MoveResult(False, MOTION_IN_PROGRESS)
+
+        piece = self._board.piece_at(position)
+        if piece is None:
+            return MoveResult(False, EMPTY_CELL)
+
+        if self._real_time_arbiter.is_airborne(position):
+            return MoveResult(False, ALREADY_AIRBORNE)
+
+        self._real_time_arbiter.start_jump(piece, position)
+
+        return MoveResult(True, OK)
 
     def wait(self, ms: int) -> None:
         """Advance simulated time by ms, delegating entirely to

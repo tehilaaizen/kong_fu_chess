@@ -77,3 +77,21 @@ def test_has_no_two_step_start_move():
     destinations = Pawn().legal_destinations(board, pawn)
 
     assert Position(2, 1) not in destinations
+
+
+def test_promotes_to_a_queen_on_reaching_the_last_row():
+    board = Board(width=3, height=5)
+    pawn = _place(board, "w", "P", Position(0, 1), id=1)
+
+    Pawn().on_piece_arrival(board, pawn)
+
+    assert pawn.kind == "Q"
+
+
+def test_does_not_promote_before_the_last_row():
+    board = Board(width=3, height=5)
+    pawn = _place(board, "w", "P", Position(1, 1), id=1)
+
+    Pawn().on_piece_arrival(board, pawn)
+
+    assert pawn.kind == "P"

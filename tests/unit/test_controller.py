@@ -11,9 +11,13 @@ class FakeGameEngine:
 
     def __init__(self):
         self.requested_moves = []
+        self.requested_jumps = []
 
     def request_move(self, source, destination):
         self.requested_moves.append((source, destination))
+
+    def request_jump(self, position):
+        self.requested_jumps.append(position)
 
 
 def _controller_with_king_at(position):
@@ -75,3 +79,28 @@ def test_outside_click_with_a_selection_cancels_it_without_calling_the_engine():
 
     assert controller.selected_cell is None
     assert game_engine.requested_moves == []
+
+
+def test_jump_sends_the_clicked_position_to_the_engine():
+    controller, game_engine = _controller_with_king_at(Position(0, 0))
+
+    controller.jump(50, 50)
+
+    assert game_engine.requested_jumps == [Position(0, 0)]
+
+
+def test_jump_outside_the_board_does_nothing():
+    controller, game_engine = _controller_with_king_at(Position(0, 0))
+
+    controller.jump(1000, 1000)
+
+    assert game_engine.requested_jumps == []
+
+
+def test_jump_does_not_touch_selection_state():
+    controller, _ = _controller_with_king_at(Position(0, 0))
+    controller.click(50, 50)
+
+    controller.jump(150, 150)
+
+    assert controller.selected_cell == Position(0, 0)

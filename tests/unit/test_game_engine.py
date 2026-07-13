@@ -1,4 +1,10 @@
-from engine.game_engine import GAME_OVER, MOTION_IN_PROGRESS, GameEngine
+from engine.game_engine import (
+    ALREADY_AIRBORNE,
+    EMPTY_CELL,
+    GAME_OVER,
+    MOTION_IN_PROGRESS,
+    GameEngine,
+)
 from model.board import Board
 from model.piece import Piece
 from model.position import Position
@@ -24,11 +30,18 @@ class SpyRealTimeArbiter:
     has_active_motion() and advance_time()'s return value - used to prove
     GameEngine delegates to it correctly without touching Board itself."""
 
-    def __init__(self, has_active_motion: bool = False, events_to_return: list | None = None) -> None:
+    def __init__(
+        self,
+        has_active_motion: bool = False,
+        events_to_return: list | None = None,
+        is_airborne: bool = False,
+    ) -> None:
         self._has_active_motion = has_active_motion
         self._events_to_return = events_to_return or []
+        self._is_airborne = is_airborne
         self.start_motion_calls: list[tuple] = []
         self.advance_time_calls: list[int] = []
+        self.start_jump_calls: list[tuple] = []
 
     def has_active_motion(self) -> bool:
         return self._has_active_motion
@@ -39,6 +52,12 @@ class SpyRealTimeArbiter:
     def advance_time(self, ms: int) -> list:
         self.advance_time_calls.append(ms)
         return self._events_to_return
+
+    def is_airborne(self, position) -> bool:
+        return self._is_airborne
+
+    def start_jump(self, piece, cell) -> None:
+        self.start_jump_calls.append((piece, cell))
 
 
 def _engine():
@@ -62,13 +81,14 @@ def test_accepts_a_legal_move_and_starts_a_motion_without_moving_the_piece_yet()
 
 
 def test_rejects_an_illegal_move_with_the_rule_engines_reason():
-    engine, board, _ = _engine()
+    engine, board, real_time_arbiter = _engine()
 
     result = engine.request_move(Position(2, 2), Position(3, 3))
 
     assert result.is_accepted is False
     assert result.reason == ILLEGAL_PIECE_MOVE
     assert board.piece_at(Position(2, 2)) is not None
+    assert real_time_arbiter.has_active_motion() is False
 
 
 def test_rejects_every_move_once_the_game_is_over():
@@ -158,3 +178,63 @@ def test_a_move_onto_an_empty_cell_does_not_end_the_game():
     engine.wait(1000)
 
     assert engine.is_game_over() is False
+
+
+def test_request_jump_accepts_and_starts_a_jump_on_an_occupied_cell():
+    engine, _, real_time_arbiter = _engine()
+
+    result = engine.request_jump(Position(2, 2))
+
+    assert result.is_accepted is True
+    assert result.reason == OK
+    assert real_time_arbiter.is_airborne(Position(2, 2)) is True
+
+
+def test_request_jump_rejects_an_empty_cell():
+    engine, _, _ = _engine()
+
+    result = engine.request_jump(Position(0, 0))
+
+    assert result.is_accepted is False
+    assert result.reason == EMPTY_CELL
+
+
+def test_request_jump_rejects_an_already_airborne_cell():
+    engine, _, _ = _engine()
+    engine.request_jump(Position(2, 2))
+
+    result = engine.request_jump(Position(2, 2))
+
+    assert result.is_accepted is False
+    assert result.reason == ALREADY_AIRBORNE
+
+
+def test_request_jump_rejects_when_the_game_is_over():
+    engine, _, _ = _engine()
+    engine.mark_game_over()
+
+    result = engine.request_jump(Position(2, 2))
+
+    assert result.is_accepted is False
+    assert result.reason == GAME_OVER
+
+
+def test_request_jump_rejects_while_a_motion_is_active():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter(has_active_motion=True))
+
+    result = engine.request_jump(Position(0, 0))
+
+    assert result.is_accepted is False
+    assert result.reason == MOTION_IN_PROGRESS
+
+
+def test_request_jump_never_consults_rule_engine():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    engine = GameEngine(board, SpyRuleEngine(), SpyRealTimeArbiter())
+
+    result = engine.request_jump(Position(0, 0))
+
+    assert result.is_accepted is True

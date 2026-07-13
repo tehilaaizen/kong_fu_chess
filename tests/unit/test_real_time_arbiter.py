@@ -86,3 +86,76 @@ def test_capturing_a_piece_removes_it_and_marks_it_captured():
     assert board.piece_at(Position(0, 1)) is rook
     assert enemy_king.state == CAPTURED
     assert events[0].captured_piece is enemy_king
+
+
+def test_a_pawn_arriving_at_the_last_row_is_promoted():
+    board = Board(width=3, height=5)
+    pawn = Piece(id=1, color="w", kind="P", cell=Position(1, 1))
+    board.add_piece(pawn)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_motion(pawn, Position(1, 1), Position(0, 1))
+    arbiter.advance_time(1000)
+
+    assert pawn.kind == "Q"
+
+
+def test_no_piece_is_airborne_initially():
+    arbiter, _, _ = _arbiter_with_rook_at(Position(0, 0))
+
+    assert arbiter.is_airborne(Position(0, 0)) is False
+
+
+def test_starting_a_jump_makes_its_cell_airborne():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+
+    arbiter.start_jump(piece, Position(2, 2))
+
+    assert arbiter.is_airborne(Position(2, 2)) is True
+
+
+def test_jump_expires_after_its_duration():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+    arbiter.start_jump(piece, Position(2, 2))
+
+    arbiter.advance_time(1000)
+
+    assert arbiter.is_airborne(Position(2, 2)) is False
+
+
+def test_an_attacker_arriving_at_an_airborne_cell_is_destroyed_and_the_jumper_survives():
+    # Attacker is one square away (1000ms travel) - arrives at the exact
+    # clock reading the jump (also 1000ms) expires. Ties favor the jumper.
+    board = Board(width=5, height=5)
+    jumper = Piece(id=1, color="b", kind="K", cell=Position(1, 2))
+    board.add_piece(jumper)
+    attacker = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(attacker)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_jump(jumper, Position(1, 2))
+    arbiter.start_motion(attacker, Position(0, 2), Position(1, 2))
+    events = arbiter.advance_time(1000)
+
+    assert board.piece_at(Position(1, 2)) is jumper
+    assert board.is_empty(Position(0, 2))
+    assert attacker.state == CAPTURED
+    assert events == []
+
+
+def test_after_a_jump_expires_an_arriving_attacker_captures_normally():
+    board = Board(width=5, height=5)
+    former_jumper = Piece(id=1, color="b", kind="K", cell=Position(2, 2))
+    board.add_piece(former_jumper)
+    attacker = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(attacker)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_jump(former_jumper, Position(2, 2))
+    arbiter.advance_time(1000)  # jump expires
+    arbiter.start_motion(attacker, Position(0, 2), Position(2, 2))
+    events = arbiter.advance_time(2000)
+
+    assert board.piece_at(Position(2, 2)) is attacker
+    assert former_jumper.state == CAPTURED
+    assert events[0].captured_piece is former_jumper

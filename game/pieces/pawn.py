@@ -62,6 +62,13 @@ class Pawn(PieceRules):
 
         return None
 
+    def on_piece_arrival(self, board: Board, piece: Piece) -> None:
+        """A pawn reaching the last row promotes to a queen - mutates
+        piece.kind in place (Board keys pieces by Position, not by kind,
+        so this needs no cooperation from Board)."""
+        if piece.cell.row == _promotion_row(piece.color, board.height):
+            piece.kind = Queen.letter
+
     def legal_destinations(self, board: Board, piece: Piece) -> set[Position]:
         """Simplified common-route pawn rules: one step forward onto an
         empty cell, or one step diagonally forward only as a capture. No
