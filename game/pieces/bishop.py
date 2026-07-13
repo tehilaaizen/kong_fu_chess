@@ -1,4 +1,9 @@
-from pieces.piece import PieceRules, TokenBoard, sliding_path_is_clear
+from model.board import Board
+from model.piece import Piece
+from model.position import Position
+from pieces.piece import PieceRules, TokenBoard, sliding_destinations, sliding_path_is_clear
+
+DIAGONAL_DIRECTIONS: list[tuple[int, int]] = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 
 
 class Bishop(PieceRules):
@@ -12,3 +17,9 @@ class Bishop(PieceRules):
         """Reuses the shared straight-line walk - it steps by the sign of
         each delta independently, so it works for diagonals too."""
         return sliding_path_is_clear(start, end, board)
+
+    def legal_destinations(self, board: Board, piece: Piece) -> set[Position]:
+        """Every cell reachable by sliding diagonally from piece's cell
+        until blocked (capture-eligible on the first enemy piece
+        encountered)."""
+        return sliding_destinations(board, piece.cell, piece.color, DIAGONAL_DIRECTIONS)

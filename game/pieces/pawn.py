@@ -1,3 +1,6 @@
+from model.board import Board
+from model.piece import Piece
+from model.position import Position
 from pieces.piece import EMPTY_SQUARE, PieceRules, TokenBoard
 from pieces.queen import Queen
 
@@ -58,3 +61,25 @@ class Pawn(PieceRules):
             return Queen.letter
 
         return None
+
+    def legal_destinations(self, board: Board, piece: Piece) -> set[Position]:
+        """Simplified common-route pawn rules: one step forward onto an
+        empty cell, or one step diagonally forward only as a capture. No
+        two-step start, no en passant, no promotion - promotion is not
+        part of the common route (unlike the legacy on_arrival hook
+        above, which only the old session.py pipeline still uses)."""
+        direction = FORWARD_DIRECTION[piece.color]
+        destinations: set[Position] = set()
+
+        forward = Position(piece.cell.row + direction, piece.cell.col)
+        if board.in_bounds(forward) and board.is_empty(forward):
+            destinations.add(forward)
+
+        for d_col in (-1, 1):
+            diagonal = Position(piece.cell.row + direction, piece.cell.col + d_col)
+            if board.in_bounds(diagonal):
+                occupant = board.piece_at(diagonal)
+                if occupant is not None and occupant.color != piece.color:
+                    destinations.add(diagonal)
+
+        return destinations

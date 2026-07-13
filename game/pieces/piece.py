@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Protocol
 
 from model.board import Board
+from model.piece import Piece
 from model.position import Position
 
 EMPTY_SQUARE = "."
@@ -36,6 +37,13 @@ class PieceRules(ABC):
     @abstractmethod
     def can_move(self, d_row: int, d_col: int, color: str) -> bool:
         """Whether a move with these row/col deltas matches this piece's shape."""
+
+    @abstractmethod
+    def legal_destinations(self, board: Board, piece: Piece) -> set[Position]:
+        """All cells piece (an instance of this kind) can currently move
+        to or capture, given board's current occupancy. Enemy-occupied
+        destinations may be included (capture-eligible); this never
+        mutates board or piece."""
 
     def is_path_clear(self, start: tuple[int, int], end: tuple[int, int], board: TokenBoard, color: str) -> bool:
         """Whether the squares strictly between start and end are empty.
@@ -103,5 +111,27 @@ def sliding_destinations(
                 break
 
             position = Position(position.row + d_row, position.col + d_col)
+
+    return destinations
+
+
+def fixed_offset_destinations(
+    board: Board, cell: Position, color: str, offsets: list[tuple[int, int]]
+) -> set[Position]:
+    """Shared by any PieceRules.legal_destinations that only ever considers
+    specific relative offsets from its cell, without sliding (knight/king):
+    each offset is a legal destination when in bounds and not occupied by a
+    friendly piece - blockers in between (if any) are irrelevant."""
+    destinations: set[Position] = set()
+
+    for d_row, d_col in offsets:
+        position = Position(cell.row + d_row, cell.col + d_col)
+
+        if not board.in_bounds(position):
+            continue
+
+        occupant = board.piece_at(position)
+        if occupant is None or occupant.color != color:
+            destinations.add(position)
 
     return destinations
