@@ -33,6 +33,10 @@ class Board:
         """The piece occupying position, or None if it's empty."""
         return self._pieces_by_cell.get(position)
 
+    def pieces(self) -> list[Piece]:
+        """All pieces currently on the board, in no particular order."""
+        return list(self._pieces_by_cell.values())
+
     def add_piece(self, piece: Piece) -> None:
         """Place piece at its own .cell. Raises OccupiedCellError if that
         cell is already taken."""

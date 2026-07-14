@@ -92,19 +92,50 @@ def test_draw_on_converts_a_three_channel_logo_onto_a_four_channel_background_an
     assert background.img.shape[:2] == (20, 20)
 
 
-def test_draw_on_converts_a_four_channel_logo_onto_a_three_channel_background():
-    background = Img().read(BOARD_IMAGE_PATH, size=(20, 20))  # 3 channels
+def test_draw_on_preserves_a_four_channel_logos_real_transparency_onto_a_three_channel_background():
+    background = Img()
+    background.img = np.full((10, 10, 3), 200, dtype=np.uint8)  # solid gray, no alpha
+
     logo = Img()
-    logo.img = np.full((10, 10, 4), 255, dtype=np.uint8)
+    logo.img = np.zeros((10, 10, 4), dtype=np.uint8)
+    logo.img[:, :5] = (0, 0, 0, 255)  # left half: opaque black
+    logo.img[:, 5:] = (0, 0, 0, 0)  # right half: fully transparent
 
     logo.draw_on(background, 0, 0)
 
-    assert background.img.shape[:2] == (20, 20)
+    assert background.img.shape[2] == 4  # background upgraded to carry alpha, not the logo downgraded
+    assert background.img[0, 0, 0] == 0  # opaque half: logo's black shows through
+    assert background.img[0, 9, 0] == 200  # transparent half: original background untouched
 
 
 def test_put_text_raises_if_not_loaded():
     try:
         Img().put_text("hi", 0, 0, 1.0)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_to_rgba_converts_a_three_channel_image_to_four_channels():
+    img = Img().read(BOARD_IMAGE_PATH, size=(20, 20))  # 3 channels
+
+    img.to_rgba()
+
+    assert img.img.shape == (20, 20, 4)
+
+
+def test_to_rgba_is_a_no_op_on_an_already_four_channel_image():
+    img = Img()
+    img.img = np.full((20, 20, 4), 255, dtype=np.uint8)
+
+    img.to_rgba()
+
+    assert img.img.shape == (20, 20, 4)
+
+
+def test_to_rgba_raises_if_not_loaded():
+    try:
+        Img().to_rgba()
         assert False, "expected ValueError"
     except ValueError:
         pass

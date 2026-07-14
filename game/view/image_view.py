@@ -59,6 +59,17 @@ class Img:
 
         return self
 
+    def to_rgba(self) -> "Img":
+        """Ensure self.img has 4 channels (BGRA), converting from 3
+        channels (BGR) if needed. A source with no alpha data gains a
+        fully opaque one (255) - this does not create real transparency,
+        only the channel itself."""
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+        if self.img.shape[2] == 3:
+            self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2BGRA)
+        return self
+
     def draw_on(self, other_img: "Img", x: int, y: int) -> None:
         """Blend self onto other_img at pixel offset (x, y), respecting
         self's alpha channel if it has one."""
@@ -69,7 +80,9 @@ class Img:
             if self.img.shape[2] == 3 and other_img.img.shape[2] == 4:
                 self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2BGRA)
             elif self.img.shape[2] == 4 and other_img.img.shape[2] == 3:
-                self.img = cv2.cvtColor(self.img, cv2.COLOR_BGRA2BGR)
+                # self's real alpha must survive - upgrade other_img
+                # instead of discarding self's transparency by downgrading it.
+                other_img.img = cv2.cvtColor(other_img.img, cv2.COLOR_BGR2BGRA)
 
         h, w = self.img.shape[:2]
         H, W = other_img.img.shape[:2]

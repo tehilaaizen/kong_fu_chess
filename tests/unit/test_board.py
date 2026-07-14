@@ -73,3 +73,19 @@ def test_in_bounds_rejects_cells_outside_the_board():
 
     assert board.in_bounds(Position(-1, 0)) is False
     assert board.in_bounds(Position(0, 3)) is False
+
+
+def test_pieces_on_an_empty_board_is_empty():
+    board = Board(width=3, height=3)
+
+    assert board.pieces() == []
+
+
+def test_pieces_returns_every_piece_on_the_board():
+    board = Board(width=3, height=3)
+    king = _king(color="w", cell=Position(0, 0), id=1)
+    other_king = _king(color="b", cell=Position(2, 2), id=2)
+    board.add_piece(king)
+    board.add_piece(other_king)
+
+    assert set(board.pieces()) == {king, other_king}
