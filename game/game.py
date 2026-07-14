@@ -1,5 +1,7 @@
 # Repo: https://github.com/tehilaaizen/kong_fu_chess
 
+from __future__ import annotations
+
 import sys
 
 from commands import CommandContext, execute_commands, parse_sections

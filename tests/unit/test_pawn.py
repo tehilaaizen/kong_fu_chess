@@ -70,13 +70,51 @@ def test_does_not_capture_diagonally_onto_a_friendly_piece():
     assert Position(1, 0) not in destinations
 
 
-def test_has_no_two_step_start_move():
+def test_no_two_step_move_from_a_non_start_row_cell():
     board = Board(width=3, height=5)
     pawn = _place(board, "w", "P", Position(4, 1), id=1)
 
     destinations = Pawn().legal_destinations(board, pawn)
 
     assert Position(2, 1) not in destinations
+
+
+def test_white_pawn_may_move_two_rows_from_its_start_row():
+    board = Board(width=3, height=5)
+    pawn = _place(board, "w", "P", Position(3, 1), id=1)
+
+    destinations = Pawn().legal_destinations(board, pawn)
+
+    assert Position(1, 1) in destinations
+
+
+def test_black_pawn_may_move_two_rows_from_its_start_row():
+    board = Board(width=3, height=5)
+    pawn = _place(board, "b", "P", Position(1, 1), id=1)
+
+    destinations = Pawn().legal_destinations(board, pawn)
+
+    assert Position(3, 1) in destinations
+
+
+def test_two_step_move_is_blocked_by_a_piece_on_the_intermediate_cell():
+    board = Board(width=3, height=5)
+    pawn = _place(board, "w", "P", Position(3, 1), id=1)
+    _place(board, "b", "P", Position(2, 1), id=2)
+
+    destinations = Pawn().legal_destinations(board, pawn)
+
+    assert Position(1, 1) not in destinations
+
+
+def test_two_step_move_is_blocked_by_a_piece_on_the_destination_cell():
+    board = Board(width=3, height=5)
+    pawn = _place(board, "w", "P", Position(3, 1), id=1)
+    _place(board, "b", "P", Position(1, 1), id=2)
+
+    destinations = Pawn().legal_destinations(board, pawn)
+
+    assert Position(1, 1) not in destinations
 
 
 def test_promotes_to_a_queen_on_reaching_the_last_row():

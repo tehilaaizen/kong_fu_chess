@@ -71,6 +71,34 @@ def test_second_click_clears_selection_even_though_the_move_may_be_illegal():
     assert controller.selected_cell is None
 
 
+def test_second_click_on_a_friendly_piece_replaces_selection_instead_of_moving():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    board.add_piece(Piece(id=2, color="w", kind="K", cell=Position(0, 2)))
+    game_engine = FakeGameEngine()
+    controller = Controller(board, BoardMapper(board), game_engine)
+
+    controller.click(50, 50)
+    controller.click(250, 50)
+
+    assert controller.selected_cell == Position(0, 2)
+    assert game_engine.requested_moves == []
+
+
+def test_second_click_on_an_enemy_piece_still_requests_a_move():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    board.add_piece(Piece(id=2, color="b", kind="P", cell=Position(0, 2)))
+    game_engine = FakeGameEngine()
+    controller = Controller(board, BoardMapper(board), game_engine)
+
+    controller.click(50, 50)
+    controller.click(250, 50)
+
+    assert controller.selected_cell is None
+    assert game_engine.requested_moves == [(Position(0, 0), Position(0, 2))]
+
+
 def test_outside_click_with_a_selection_cancels_it_without_calling_the_engine():
     controller, game_engine = _controller_with_king_at(Position(0, 0))
 

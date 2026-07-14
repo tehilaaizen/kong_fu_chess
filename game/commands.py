@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from engine.game_engine import GameEngine
 from input.controller import Controller
 from model.board import Board

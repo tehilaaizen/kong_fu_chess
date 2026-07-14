@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from errors import EMPTY_BOARD, ROW_WIDTH_MISMATCH, UNKNOWN_TOKEN, BoardValidationError
 from model.board import Board
 from model.piece import Piece

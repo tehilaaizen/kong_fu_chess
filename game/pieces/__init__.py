@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pieces.bishop import Bishop
 from pieces.king import King
 from pieces.knight import Knight

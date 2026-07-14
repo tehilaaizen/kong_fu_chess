@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from model.board import Board
 from model.piece import Piece
 from model.position import Position
@@ -12,20 +14,31 @@ def _promotion_row(color: str, height: int) -> int:
     return height - 1 if FORWARD_DIRECTION[color] == 1 else 0
 
 
+def _start_row(color: str, height: int) -> int:
+    """The row this color's pawns begin on, given the board's height."""
+    return 1 if FORWARD_DIRECTION[color] == 1 else height - 2
+
+
 class Pawn(PieceRules):
     letter = "P"
 
     def legal_destinations(self, board: Board, piece: Piece) -> set[Position]:
-        """Simplified common-route pawn rules: one step forward onto an
-        empty cell, or one step diagonally forward only as a capture. No
-        two-step start, no en passant, no promotion here - promotion is a
-        post-arrival effect, see on_piece_arrival."""
+        """Pawn rules: one step forward onto an empty cell (plus a
+        two-step start move from the pawn's home row, requiring both
+        cells empty), or one step diagonally forward only as a capture.
+        No en passant, no promotion here - promotion is a post-arrival
+        effect, see on_piece_arrival."""
         direction = FORWARD_DIRECTION[piece.color]
         destinations: set[Position] = set()
 
         forward = Position(piece.cell.row + direction, piece.cell.col)
         if board.in_bounds(forward) and board.is_empty(forward):
             destinations.add(forward)
+
+            if piece.cell.row == _start_row(piece.color, board.height):
+                double_forward = Position(piece.cell.row + 2 * direction, piece.cell.col)
+                if board.in_bounds(double_forward) and board.is_empty(double_forward):
+                    destinations.add(double_forward)
 
         for d_col in (-1, 1):
             diagonal = Position(piece.cell.row + direction, piece.cell.col + d_col)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from model.board import Board
 from model.piece import CAPTURED, Piece
 from model.position import Position

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Protocol
 
 from input.board_mapper import BoardMapper
@@ -32,8 +34,10 @@ class Controller:
 
     def click(self, x: int, y: int) -> None:
         """Handle one click: select a piece on the first in-board click,
-        or request a move (and clear selection) on the second. An
-        outside-board click cancels any active selection."""
+        or request a move (and clear selection) on the second - unless
+        the second click lands on another piece of the same color, in
+        which case selection moves to that piece instead of attempting
+        a move. An outside-board click cancels any active selection."""
         position = self._board_mapper.pixel_to_cell(x, y)
 
         if position is None:
@@ -45,8 +49,19 @@ class Controller:
                 self.selected_cell = position
             return
 
+        if self._holds_friendly_piece(position):
+            self.selected_cell = position
+            return
+
         self._game_engine.request_move(self.selected_cell, position)
         self.selected_cell = None
+
+    def _holds_friendly_piece(self, position: Position) -> bool:
+        """Whether position holds a piece of the same color as the
+        currently selected piece."""
+        selected_piece = self._board.piece_at(self.selected_cell)
+        clicked_piece = self._board.piece_at(position)
+        return clicked_piece is not None and selected_piece is not None and clicked_piece.color == selected_piece.color
 
     def jump(self, x: int, y: int) -> None:
         """Handle a jump command: request the piece at (x, y) to jump.

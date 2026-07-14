@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from model.position import Position
 
 IDLE = "idle"

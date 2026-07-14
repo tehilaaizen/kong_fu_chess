@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 class Position:
     """A single board cell (row, col) - not pixels. Board owns bounds
     checking; Position is a plain value object."""
