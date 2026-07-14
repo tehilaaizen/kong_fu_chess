@@ -3,6 +3,7 @@ from engine.game_engine import (
     EMPTY_CELL,
     GAME_OVER,
     MOTION_IN_PROGRESS,
+    PIECE_RESTING,
     GameEngine,
 )
 from model.board import Board
@@ -35,10 +36,12 @@ class SpyRealTimeArbiter:
         has_active_motion: bool = False,
         events_to_return: list | None = None,
         is_airborne: bool = False,
+        is_resting: bool = False,
     ) -> None:
         self._has_active_motion = has_active_motion
         self._events_to_return = events_to_return or []
         self._is_airborne = is_airborne
+        self._is_resting = is_resting
         self.start_motion_calls: list[tuple] = []
         self.advance_time_calls: list[int] = []
         self.start_jump_calls: list[tuple] = []
@@ -58,6 +61,9 @@ class SpyRealTimeArbiter:
 
     def start_jump(self, piece, cell) -> None:
         self.start_jump_calls.append((piece, cell))
+
+    def is_resting(self, piece) -> bool:
+        return self._is_resting
 
 
 def _engine():
@@ -130,6 +136,27 @@ def test_motion_in_progress_guard_runs_before_rule_engine_validation():
     result = engine.request_move(Position(0, 0), Position(0, 1))
 
     assert result.reason == MOTION_IN_PROGRESS
+
+
+def test_rejects_a_move_from_a_resting_piece():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter(is_resting=True))
+
+    result = engine.request_move(Position(0, 0), Position(0, 1))
+
+    assert result.is_accepted is False
+    assert result.reason == PIECE_RESTING
+
+
+def test_piece_resting_guard_runs_before_rule_engine_validation():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    engine = GameEngine(board, SpyRuleEngine(), SpyRealTimeArbiter(is_resting=True))
+
+    result = engine.request_move(Position(0, 0), Position(0, 1))
+
+    assert result.reason == PIECE_RESTING
 
 
 def test_wait_delegates_to_real_time_arbiter_without_touching_board_directly():
@@ -238,3 +265,14 @@ def test_request_jump_never_consults_rule_engine():
     result = engine.request_jump(Position(0, 0))
 
     assert result.is_accepted is True
+
+
+def test_request_jump_rejects_a_resting_piece():
+    board = Board(width=3, height=3)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter(is_resting=True))
+
+    result = engine.request_jump(Position(0, 0))
+
+    assert result.is_accepted is False
+    assert result.reason == PIECE_RESTING

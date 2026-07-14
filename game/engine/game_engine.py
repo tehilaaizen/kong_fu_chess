@@ -11,6 +11,7 @@ GAME_OVER = "game_over"
 MOTION_IN_PROGRESS = "motion_in_progress"
 EMPTY_CELL = "empty_cell"
 ALREADY_AIRBORNE = "already_airborne"
+PIECE_RESTING = "piece_resting"
 
 
 class MoveResult:
@@ -53,8 +54,9 @@ class GameEngine:
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         """Request a move from source to destination. Rejected outright
-        with reason game_over if the game already ended, or
-        motion_in_progress if another motion is still travelling.
+        with reason game_over if the game already ended, motion_in_progress
+        if another motion is still travelling, or piece_resting if the
+        source piece is still in cooldown from its last move/jump.
         Otherwise delegated to RuleEngine; a legal move starts a motion
         through RealTimeArbiter (it does not relocate the piece itself -
         that happens only on arrival, once wait() advances time enough)."""
@@ -64,11 +66,14 @@ class GameEngine:
         if self._real_time_arbiter.has_active_motion():
             return MoveResult(False, MOTION_IN_PROGRESS)
 
+        piece = self._board.piece_at(source)
+        if piece is not None and self._real_time_arbiter.is_resting(piece):
+            return MoveResult(False, PIECE_RESTING)
+
         validation = self._rule_engine.validate_move(self._board, source, destination)
         if not validation.is_valid:
             return MoveResult(False, validation.reason)
 
-        piece = self._board.piece_at(source)
         self._real_time_arbiter.start_motion(piece, source, destination)
 
         return MoveResult(True, validation.reason)
@@ -79,7 +84,8 @@ class GameEngine:
         destroyed instead of capturing it. Unlike request_move, this
         never consults RuleEngine - a jump isn't a chess move, so there's
         no destination-legality question, only the same application-level
-        guards (game_over, motion_in_progress) plus jump-specific ones."""
+        guards (game_over, motion_in_progress, piece_resting) plus
+        jump-specific ones (empty_cell, already_airborne)."""
         if self.is_game_over():
             return MoveResult(False, GAME_OVER)
 
@@ -89,6 +95,9 @@ class GameEngine:
         piece = self._board.piece_at(position)
         if piece is None:
             return MoveResult(False, EMPTY_CELL)
+
+        if self._real_time_arbiter.is_resting(piece):
+            return MoveResult(False, PIECE_RESTING)
 
         if self._real_time_arbiter.is_airborne(position):
             return MoveResult(False, ALREADY_AIRBORNE)

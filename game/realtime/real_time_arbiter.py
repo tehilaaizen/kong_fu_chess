@@ -7,9 +7,14 @@ from pieces import PIECE_TYPES
 from pieces.piece import PieceRules
 from realtime.jump import Jump
 from realtime.motion import Motion
+from realtime.rest import Rest
 
 MS_PER_CELL = 1000
 JUMP_DURATION_MS = 1000
+MOVE_REST_DURATION_MS = 5000
+JUMP_REST_DURATION_MS = 3000
+LONG_REST = "long_rest"
+SHORT_REST = "short_rest"
 
 
 class ArrivalEvent:
@@ -43,10 +48,21 @@ class RealTimeArbiter:
         self._clock_ms = 0
         self._active_motions: list[Motion] = []
         self._airborne: list[Jump] = []
+        self._resting: list[Rest] = []
 
     def has_active_motion(self) -> bool:
         """Whether any motion is still travelling."""
         return len(self._active_motions) > 0
+
+    def is_resting(self, piece: Piece) -> bool:
+        """Whether piece is currently in cooldown (after a move or a
+        jump) and cannot move or jump again yet."""
+        return any(rest.piece is piece and rest.until_clock_ms > self._clock_ms for rest in self._resting)
+
+    def _start_rest(self, piece: Piece, duration_ms: int, label: str) -> None:
+        """Put piece into cooldown for duration_ms starting now, tagged
+        with label ("long_rest"/"short_rest") for future animation use."""
+        self._resting.append(Rest(piece, self._clock_ms + duration_ms, label))
 
     def start_motion(self, piece: Piece, source: Position, destination: Position) -> None:
         """Begin moving piece from source to destination. Board occupancy
@@ -87,10 +103,7 @@ class RealTimeArbiter:
         events: list[ArrivalEvent] = []
         for motion in arrived:
             if self.is_airborne(motion.destination):
-                # the airborne defender destroys the arriving attacker and stays put
-                self._clear_airborne(motion.destination)
-                self._board.remove_piece(motion.source)
-                motion.piece.state = CAPTURED
+                self._resolve_airborne_defense(motion)
                 continue
 
             captured_piece = self._board.piece_at(motion.destination)
@@ -101,11 +114,31 @@ class RealTimeArbiter:
 
             self._piece_rules_by_kind[motion.piece.kind].on_piece_arrival(self._board, motion.piece)
 
+            self._start_rest(motion.piece, MOVE_REST_DURATION_MS, LONG_REST)
             events.append(ArrivalEvent(motion.piece, motion.source, motion.destination, captured_piece))
 
-        self._airborne = [jump for jump in self._airborne if jump.until_clock_ms > self._clock_ms]
+        still_airborne: list[Jump] = []
+        for jump in self._airborne:
+            if jump.until_clock_ms > self._clock_ms:
+                still_airborne.append(jump)
+            else:
+                self._start_rest(jump.piece, JUMP_REST_DURATION_MS, SHORT_REST)
+        self._airborne = still_airborne
+
+        self._resting = [rest for rest in self._resting if rest.until_clock_ms > self._clock_ms]
 
         return events
+
+    def _resolve_airborne_defense(self, motion: Motion) -> None:
+        """An attacker arrived at a cell whose piece is still airborne
+        (mid-jump): the jumper destroys the attacker and stays put,
+        surviving into its own (short) cooldown - it "used up" its jump
+        just as if it had expired naturally."""
+        jumper = next(jump.piece for jump in self._airborne if jump.cell == motion.destination)
+        self._clear_airborne(motion.destination)
+        self._start_rest(jumper, JUMP_REST_DURATION_MS, SHORT_REST)
+        self._board.remove_piece(motion.source)
+        motion.piece.state = CAPTURED
 
     def _clear_airborne(self, cell: Position) -> None:
         """Remove the jump record for cell (it has just been resolved by

@@ -114,6 +114,15 @@ def test_starting_a_jump_makes_its_cell_airborne():
     assert arbiter.is_airborne(Position(2, 2)) is True
 
 
+def test_a_jump_remains_airborne_before_its_duration_elapses():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+    arbiter.start_jump(piece, Position(2, 2))
+
+    arbiter.advance_time(999)
+
+    assert arbiter.is_airborne(Position(2, 2)) is True
+
+
 def test_jump_expires_after_its_duration():
     arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
     arbiter.start_jump(piece, Position(2, 2))
@@ -159,3 +168,71 @@ def test_after_a_jump_expires_an_arriving_attacker_captures_normally():
     assert board.piece_at(Position(2, 2)) is attacker
     assert former_jumper.state == CAPTURED
     assert events[0].captured_piece is former_jumper
+
+
+def test_no_piece_is_resting_initially():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+
+    assert arbiter.is_resting(piece) is False
+
+
+def test_a_piece_rests_immediately_after_a_move_arrives():
+    arbiter, board, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+
+    arbiter.advance_time(1000)
+
+    assert arbiter.is_resting(piece) is True
+
+
+def test_a_resting_piece_stops_resting_after_move_rest_duration():
+    arbiter, board, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+    arbiter.advance_time(1000)
+
+    arbiter.advance_time(4999)
+    assert arbiter.is_resting(piece) is True
+
+    arbiter.advance_time(1)
+    assert arbiter.is_resting(piece) is False
+
+
+def test_a_piece_rests_after_its_jump_expires_naturally():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+    arbiter.start_jump(piece, Position(2, 2))
+
+    arbiter.advance_time(1000)  # jump expires
+
+    assert arbiter.is_airborne(Position(2, 2)) is False
+    assert arbiter.is_resting(piece) is True
+
+
+def test_a_jump_rest_is_shorter_than_a_move_rest():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+    arbiter.start_jump(piece, Position(2, 2))
+    arbiter.advance_time(1000)  # jump expires, short rest begins
+
+    arbiter.advance_time(2999)
+    assert arbiter.is_resting(piece) is True
+
+    arbiter.advance_time(1)
+    assert arbiter.is_resting(piece) is False
+
+
+def test_a_jumper_that_destroys_an_attacker_also_rests_afterward():
+    board = Board(width=5, height=5)
+    jumper = Piece(id=1, color="b", kind="K", cell=Position(1, 2))
+    board.add_piece(jumper)
+    attacker = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(attacker)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_jump(jumper, Position(1, 2))
+    arbiter.start_motion(attacker, Position(0, 2), Position(1, 2))
+    arbiter.advance_time(1000)
+
+    assert attacker.state == CAPTURED
+    assert arbiter.is_resting(jumper) is True
+
+    arbiter.advance_time(3000)
+    assert arbiter.is_resting(jumper) is False
