@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import Protocol
+
+from engine.game_snapshot import GameSnapshot
 from model.board import Board
 from model.piece import Piece
 from model.position import Position
@@ -12,6 +15,15 @@ MOTION_IN_PROGRESS = "motion_in_progress"
 EMPTY_CELL = "empty_cell"
 ALREADY_AIRBORNE = "already_airborne"
 PIECE_RESTING = "piece_resting"
+
+
+class GameObserver(Protocol):
+    """The only capability GameEngine needs from something that wants to
+    be notified of state changes - lets tests inject a lightweight fake
+    instead of a real view-layer object."""
+
+    def on_snapshot(self, snapshot: GameSnapshot) -> None:
+        ...
 
 
 class MoveResult:
@@ -43,6 +55,7 @@ class GameEngine:
         self._rule_engine = rule_engine
         self._real_time_arbiter = real_time_arbiter
         self._game_over = False
+        self._observers: list[GameObserver] = []
 
     def is_game_over(self) -> bool:
         """Whether the game has already ended."""
@@ -51,6 +64,31 @@ class GameEngine:
     def mark_game_over(self) -> None:
         """Record that the game has ended. Idempotent."""
         self._game_over = True
+
+    def add_observer(self, observer: GameObserver) -> None:
+        """Register observer to be notified with a fresh snapshot every
+        time wait() advances time - see _notify_observers."""
+        self._observers.append(observer)
+
+    def snapshot(self) -> GameSnapshot:
+        """A read-only view of the current game state, including each
+        piece's true animation state (move/resting/idle) from
+        RealTimeArbiter."""
+        return GameSnapshot.from_engine(self._board, self._real_time_arbiter)
+
+    def _notify_observers(self) -> None:
+        """Push a fresh snapshot to every registered observer. Called
+        only from wait() - the only point where Board state can actually
+        have changed (an arrival); a click that merely selects or starts
+        a motion doesn't change Board, so it doesn't need its own notify.
+        No-ops (skipping the snapshot build too) when nothing is
+        registered - most tests never register an observer at all."""
+        if not self._observers:
+            return
+
+        snapshot = self.snapshot()
+        for observer in self._observers:
+            observer.on_snapshot(snapshot)
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         """Request a move from source to destination. Rejected outright
@@ -109,12 +147,15 @@ class GameEngine:
     def wait(self, ms: int) -> None:
         """Advance simulated time by ms, delegating entirely to
         RealTimeArbiter - GameEngine never touches Board motion state
-        directly. Ends the game if any arrival captured a king."""
+        directly. Ends the game if any arrival captured a king, then
+        notifies observers with a fresh snapshot."""
         events = self._real_time_arbiter.advance_time(ms)
 
         for event in events:
             if self._ends_the_game(event.captured_piece):
                 self.mark_game_over()
+
+        self._notify_observers()
 
     def _ends_the_game(self, captured_piece: Piece | None) -> bool:
         """Whether capturing captured_piece ends the game. Only the king

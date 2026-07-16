@@ -54,10 +54,25 @@ class RealTimeArbiter:
         """Whether any motion is still travelling."""
         return len(self._active_motions) > 0
 
+    def is_moving(self, piece: Piece) -> bool:
+        """Whether piece specifically is currently travelling (as opposed
+        to has_active_motion, which only reports whether any motion is
+        active at all)."""
+        return any(motion.piece is piece for motion in self._active_motions)
+
     def is_resting(self, piece: Piece) -> bool:
         """Whether piece is currently in cooldown (after a move or a
         jump) and cannot move or jump again yet."""
         return any(rest.piece is piece and rest.until_clock_ms > self._clock_ms for rest in self._resting)
+
+    def resting_label(self, piece: Piece) -> str | None:
+        """Which cooldown piece is currently resting under ("long_rest"
+        after a move, "short_rest" after a jump), or None if it isn't
+        resting right now."""
+        for rest in self._resting:
+            if rest.piece is piece and rest.until_clock_ms > self._clock_ms:
+                return rest.label
+        return None
 
     def _start_rest(self, piece: Piece, duration_ms: int, label: str) -> None:
         """Put piece into cooldown for duration_ms starting now, tagged

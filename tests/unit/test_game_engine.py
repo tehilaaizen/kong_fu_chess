@@ -276,3 +276,55 @@ def test_request_jump_rejects_a_resting_piece():
 
     assert result.is_accepted is False
     assert result.reason == PIECE_RESTING
+
+
+class SpyObserver:
+    """Records every snapshot it's notified with."""
+
+    def __init__(self) -> None:
+        self.snapshots: list = []
+
+    def on_snapshot(self, snapshot) -> None:
+        self.snapshots.append(snapshot)
+
+
+def test_wait_notifies_a_registered_observer_with_a_snapshot():
+    engine, board, _ = _engine()
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.wait(0)
+
+    assert len(observer.snapshots) == 1
+    assert observer.snapshots[0].pieces[0].kind == "R"
+
+
+def test_wait_notifies_every_registered_observer():
+    engine, _, _ = _engine()
+    first, second = SpyObserver(), SpyObserver()
+    engine.add_observer(first)
+    engine.add_observer(second)
+
+    engine.wait(0)
+
+    assert len(first.snapshots) == 1
+    assert len(second.snapshots) == 1
+
+
+def test_snapshot_reports_move_state_while_a_motion_is_active():
+    engine, board, _ = _engine()
+
+    engine.request_move(Position(2, 2), Position(2, 4))
+    snapshot = engine.snapshot()
+
+    assert snapshot.pieces[0].state == "move"
+
+
+def test_snapshot_reports_long_rest_after_a_move_arrives():
+    engine, board, _ = _engine()
+
+    engine.request_move(Position(2, 2), Position(2, 4))
+    engine.wait(2000)
+    snapshot = engine.snapshot()
+
+    assert snapshot.pieces[0].state == "long_rest"

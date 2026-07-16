@@ -1,5 +1,6 @@
 from engine.game_snapshot import GameSnapshot, PiecePlacement
 from model.position import Position
+from view.animation_clip import load_animation_clip
 from view.renderer import Renderer
 
 BOARD_IMAGE_PATH = "assets/bord.png"
@@ -24,7 +25,7 @@ def test_load_board_resizes_to_the_default_board_size():
 
 
 def test_load_board_resizes_to_a_custom_board_size():
-    board = Renderer(BOARD_IMAGE_PATH, board_size_px=400).load_board()
+    board = Renderer(BOARD_IMAGE_PATH, board_height_px=400, board_width_px=400).load_board()
 
     assert board.img.shape[:2] == (400, 400)
 
@@ -32,28 +33,27 @@ def test_load_board_resizes_to_a_custom_board_size():
 def test_render_snapshot_with_no_pieces_is_just_the_board():
     snapshot = GameSnapshot(board_width=8, board_height=8, pieces=[])
 
-    canvas = Renderer().render_snapshot(snapshot)
+    canvas = Renderer().render_snapshot(snapshot, frame_by_piece_id={})
 
     assert canvas.img.shape[:2] == (800, 800)
 
 
-def test_load_piece_sprite_returns_a_four_channel_image():
-    sprite = Renderer()._load_piece_sprite(kind="P", color="w")
-
-    assert sprite.img.shape == (100, 100, 4)
-
-
-def test_render_snapshot_draws_every_piece_without_error():
+def test_render_snapshot_draws_every_piece_at_its_given_frame():
     snapshot = GameSnapshot(
         board_width=8,
         board_height=8,
         pieces=[
-            PiecePlacement(kind="K", color="w", cell=Position(7, 4)),
-            PiecePlacement(kind="R", color="b", cell=Position(0, 0)),
-            PiecePlacement(kind="P", color="w", cell=Position(6, 0)),
+            PiecePlacement(id=1, kind="K", color="w", cell=Position(7, 4), state="idle"),
+            PiecePlacement(id=2, kind="R", color="b", cell=Position(0, 0), state="idle"),
+            PiecePlacement(id=3, kind="P", color="w", cell=Position(6, 0), state="idle"),
         ],
     )
+    frame_by_piece_id = {
+        1: load_animation_clip("K", "w", "idle").frame_at(0),
+        2: load_animation_clip("R", "b", "idle").frame_at(0),
+        3: load_animation_clip("P", "w", "idle").frame_at(0),
+    }
 
-    canvas = Renderer().render_snapshot(snapshot)
+    canvas = Renderer().render_snapshot(snapshot, frame_by_piece_id)
 
     assert canvas.img.shape[:2] == (800, 800)

@@ -116,3 +116,11 @@ class Img:
         cv2.imshow("Image", self.img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+    def show_frame(self, window_name: str) -> None:
+        """Display self.img in window_name without blocking or tearing
+        down the window - for one frame of a live render loop (see
+        show() for the one-shot blocking version)."""
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+        cv2.imshow(window_name, self.img)

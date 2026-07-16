@@ -236,3 +236,59 @@ def test_a_jumper_that_destroys_an_attacker_also_rests_afterward():
 
     arbiter.advance_time(3000)
     assert arbiter.is_resting(jumper) is False
+
+
+def test_a_piece_is_not_moving_initially():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+
+    assert arbiter.is_moving(piece) is False
+
+
+def test_a_piece_is_moving_while_its_motion_is_active():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+
+    assert arbiter.is_moving(piece) is True
+
+
+def test_a_piece_stops_moving_once_it_arrives():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+
+    arbiter.advance_time(1000)
+
+    assert arbiter.is_moving(piece) is False
+
+
+def test_resting_label_is_none_when_not_resting():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+
+    assert arbiter.resting_label(piece) is None
+
+
+def test_resting_label_is_long_rest_after_a_move():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+
+    arbiter.advance_time(1000)
+
+    assert arbiter.resting_label(piece) == "long_rest"
+
+
+def test_resting_label_is_short_rest_after_a_jump():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+    arbiter.start_jump(piece, Position(2, 2))
+
+    arbiter.advance_time(1000)  # jump expires, short rest begins
+
+    assert arbiter.resting_label(piece) == "short_rest"
+
+
+def test_resting_label_reverts_to_none_once_the_cooldown_ends():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+    arbiter.advance_time(1000)
+
+    arbiter.advance_time(5000)
+
+    assert arbiter.resting_label(piece) is None
