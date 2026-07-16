@@ -102,6 +102,13 @@ class GameEngine:
         on_motion_started/on_jump_started/on_rest_started."""
         return GameSnapshot.from_board(self._board)
 
+    def legal_destinations(self, source: Position) -> set[Position]:
+        """Every cell the piece at source can currently move to or
+        capture (empty if source is empty) - a read-only query the view
+        uses to highlight a selected piece's options. Delegates to
+        RuleEngine; never mutates state or starts a motion."""
+        return self._rule_engine.legal_destinations(self._board, source)
+
     def _notify_arrival(self, event: ArrivalEvent) -> None:
         """Tell every registered observer that event just arrived."""
         for observer in self._observers:

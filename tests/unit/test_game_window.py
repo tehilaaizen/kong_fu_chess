@@ -38,9 +38,12 @@ def _window(extractor=None, command_sender=None):
     return GameWindow(
         board_renderer=None,
         piece_renderer=None,
+        highlight_renderer=None,
+        rest_overlay_renderer=None,
         extractor=extractor or _FakeExtractor(),
         command_sender=command_sender or _FakeCommandSender(),
         game_engine=None,
+        selection_source=None,
         clock=None,
         registry=None,
         score_renderer=None,

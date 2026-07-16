@@ -111,6 +111,39 @@ def test_current_frames_returns_a_frame_for_every_piece_in_the_snapshot():
     assert set(frames.keys()) == {1, 2}
 
 
+def test_current_offsets_is_zero_for_a_still_piece():
+    registry = _registry()
+    snapshot = _snapshot([PiecePlacement(id=1, kind="P", color="w", cell=Position(6, 0))])
+    registry.seed(snapshot)
+
+    assert registry.current_offsets(snapshot) == {1: (0.0, 0.0)}
+
+
+def test_current_offsets_reflects_a_moving_piece():
+    registry = _registry()
+    piece = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    registry.on_motion_started(piece, Position(0, 0), Position(0, 4), duration_ms=1000)
+    registry.advance_time(250)
+    snapshot = _snapshot([PiecePlacement(id=1, kind="R", color="w", cell=Position(0, 0))])
+
+    assert registry.current_offsets(snapshot) == {1: (0.0, 1.0)}
+
+
+def test_resting_overlays_lists_only_resting_pieces_with_their_fraction():
+    registry = _registry()
+    moving = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    resting = Piece(id=2, color="b", kind="N", cell=Position(3, 3))
+    registry.on_motion_started(moving, Position(0, 0), Position(0, 1), duration_ms=1000)
+    registry.on_rest_started(resting, duration_ms=4000, label="long_rest")
+    registry.advance_time(1000)
+    snapshot = _snapshot([
+        PiecePlacement(id=1, kind="R", color="w", cell=Position(0, 0)),
+        PiecePlacement(id=2, kind="N", color="b", cell=Position(3, 3)),
+    ])
+
+    assert registry.resting_overlays(snapshot) == [(Position(3, 3), 0.75)]
+
+
 def test_on_game_over_does_not_raise():
     registry = _registry()
 

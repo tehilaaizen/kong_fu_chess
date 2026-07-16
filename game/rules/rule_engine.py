@@ -54,3 +54,15 @@ class RuleEngine:
             return MoveValidation(False, ILLEGAL_PIECE_MOVE)
 
         return MoveValidation(True, OK)
+
+    def legal_destinations(self, board: Board, source: Position) -> set[Position]:
+        """Every cell the piece at source may currently move to or
+        capture, or an empty set if source holds no piece. Reuses each
+        PieceRules' legal_destinations - the same source of truth
+        validate_move consults - so the view can highlight a selected
+        piece's options without duplicating movement logic."""
+        piece = board.piece_at(source)
+        if piece is None:
+            return set()
+
+        return self._piece_rules_by_kind[piece.kind].legal_destinations(board, piece)

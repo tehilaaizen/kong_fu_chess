@@ -16,6 +16,8 @@ from view.animation.animation_library import AnimationLibrary
 from view.animation.piece_animator_registry import PieceAnimatorRegistry
 from view.board.board_loader import BoardLoader
 from view.board.board_renderer import BoardRenderer
+from view.board.highlight_renderer import HighlightRenderer
+from view.board.rest_overlay_renderer import RestOverlayRenderer
 from view.config import DEFAULT_PLAYER_NAME_BY_COLOR
 from view.frame_clock import FrameClock
 from view.geometry import BoardGeometry
@@ -66,9 +68,12 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
     window = GameWindow(
         board_renderer=BoardRenderer(BoardLoader(geometry)),
         piece_renderer=PieceRenderer(geometry),
+        highlight_renderer=HighlightRenderer(geometry),
+        rest_overlay_renderer=RestOverlayRenderer(geometry),
         extractor=MouseCommandExtractor(geometry),
         command_sender=LocalCommandSender(controller),
         game_engine=game_engine,
+        selection_source=controller,
         clock=FrameClock(),
         registry=registry,
         score_renderer=ScoreRenderer(geometry),

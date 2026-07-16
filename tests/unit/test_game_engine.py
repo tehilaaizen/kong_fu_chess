@@ -14,6 +14,17 @@ from realtime.real_time_arbiter import ArrivalEvent, RealTimeArbiter, RestStarte
 from rules.rule_engine import ILLEGAL_PIECE_MOVE, OK, RuleEngine
 
 
+def test_legal_destinations_delegates_to_the_rule_engine():
+    board = Board(width=5, height=5)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(2, 2)))
+    engine = GameEngine(board, RuleEngine(piece_rules_by_kind={"R": Rook()}), SpyRealTimeArbiter())
+
+    destinations = engine.legal_destinations(Position(2, 2))
+
+    assert Position(2, 4) in destinations
+    assert Position(3, 3) not in destinations
+
+
 class SpyRuleEngine:
     """Test double that records whether it was ever asked to validate -
     used to prove a guard short-circuits before RuleEngine runs."""

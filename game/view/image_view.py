@@ -100,6 +100,26 @@ class Img:
         else:
             other_img.img[y:y + h, x:x + w] = self.img
 
+    def overlay_rect(self, x: int, y: int, width: int, height: int,
+                     color: tuple[int, int, int], alpha: float) -> None:
+        """Alpha-blend a solid color rectangle onto self.img in place at
+        pixel (x, y). color is BGR; alpha is 0..1 (0 invisible, 1 fully
+        opaque). The rectangle is clipped to the image bounds, so a
+        partly-offscreen (or zero-height) rect simply draws its visible
+        part, or nothing. Any alpha channel is left untouched."""
+        if self.img is None:
+            raise ValueError("Image not loaded.")
+
+        height_px, width_px = self.img.shape[:2]
+        x0, y0 = max(x, 0), max(y, 0)
+        x1, y1 = min(x + width, width_px), min(y + height, height_px)
+        if x0 >= x1 or y0 >= y1:
+            return
+
+        roi = self.img[y0:y1, x0:x1]
+        for channel in range(3):
+            roi[..., channel] = (1 - alpha) * roi[..., channel] + alpha * color[channel]
+
     def put_text(self, txt: str, x: int, y: int, font_size: float,
                  color: tuple[int, int, int, int] = (255, 255, 255, 255), thickness: int = 1) -> None:
         """Draw txt onto self.img at pixel position (x, y)."""

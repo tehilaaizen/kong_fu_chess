@@ -48,8 +48,9 @@ class PieceAnimatorRegistry:
         self._animator_for(event.piece).set_kind(event.piece.kind)
 
     def on_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
-        """GameObserver hook: show piece's move animation."""
-        self._animator_for(piece).start_motion()
+        """GameObserver hook: show piece's move animation, sliding it
+        from source to destination over duration_ms."""
+        self._animator_for(piece).start_motion(source, destination, duration_ms)
 
     def on_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
         """GameObserver hook: show piece's jump animation."""
@@ -76,3 +77,22 @@ class PieceAnimatorRegistry:
         """The frame to draw right now for every piece in snapshot,
         keyed by piece id."""
         return {placement.id: self._animators[placement.id].current_frame() for placement in snapshot.pieces}
+
+    def current_offsets(self, snapshot: GameSnapshot) -> dict[int, tuple[float, float]]:
+        """The (row, col) cell offset to slide each piece by this frame,
+        keyed by piece id - non-moving pieces map to (0.0, 0.0)."""
+        return {
+            placement.id: self._animators[placement.id].render_offset_cells()
+            for placement in snapshot.pieces
+        }
+
+    def resting_overlays(self, snapshot: GameSnapshot) -> list[tuple[Position, float]]:
+        """Each currently-resting piece's cell paired with the fraction
+        of its cooldown still remaining (1.0 -> 0.0) - exactly what
+        RestOverlayRenderer needs to draw the draining overlay."""
+        overlays: list[tuple[Position, float]] = []
+        for placement in snapshot.pieces:
+            fraction = self._animators[placement.id].rest_fraction_remaining()
+            if fraction is not None:
+                overlays.append((placement.cell, fraction))
+        return overlays

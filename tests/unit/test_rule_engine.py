@@ -75,3 +75,18 @@ def test_accepts_a_legal_move():
 
     assert validation.is_valid is True
     assert validation.reason == OK
+
+
+def test_legal_destinations_returns_the_pieces_own_moves():
+    board = _board_with_rook()
+
+    destinations = _rule_engine().legal_destinations(board, Position(2, 2))
+
+    assert Position(2, 4) in destinations  # along a clear rank
+    assert Position(3, 3) not in destinations  # a rook never moves diagonally
+
+
+def test_legal_destinations_of_an_empty_cell_is_empty():
+    board = _board_with_rook()
+
+    assert _rule_engine().legal_destinations(board, Position(0, 0)) == set()

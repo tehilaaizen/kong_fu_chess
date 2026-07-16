@@ -139,3 +139,58 @@ def test_to_rgba_raises_if_not_loaded():
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_overlay_rect_blends_the_color_by_alpha():
+    img = Img()
+    img.img = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    img.overlay_rect(0, 0, 10, 10, (0, 0, 200), 0.5)
+
+    assert img.img[0, 0, 2] == 100  # red channel: 0.5 * 200 over black
+    assert img.img[0, 0, 0] == 0  # untouched blue channel
+
+
+def test_overlay_rect_only_fills_the_given_rectangle():
+    img = Img()
+    img.img = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    img.overlay_rect(0, 0, 4, 4, (0, 0, 200), 1.0)
+
+    assert img.img[0, 0, 2] == 200  # inside the rect
+    assert img.img[9, 9, 2] == 0  # outside the rect, untouched
+
+
+def test_overlay_rect_clips_a_rectangle_that_spills_past_the_edge():
+    img = Img()
+    img.img = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    img.overlay_rect(8, 8, 100, 100, (0, 0, 200), 1.0)  # spills off the bottom-right
+
+    assert img.img[9, 9, 2] == 200  # the visible corner still drawn, no exception
+
+
+def test_overlay_rect_entirely_offscreen_draws_nothing():
+    img = Img()
+    img.img = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    img.overlay_rect(-5, -5, 4, 4, (0, 0, 200), 1.0)
+
+    assert int(img.img[:, :, 2].max()) == 0
+
+
+def test_overlay_rect_zero_height_is_a_no_op():
+    img = Img()
+    img.img = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    img.overlay_rect(2, 2, 5, 0, (0, 0, 200), 1.0)
+
+    assert int(img.img[:, :, 2].max()) == 0
+
+
+def test_overlay_rect_raises_if_not_loaded():
+    try:
+        Img().overlay_rect(0, 0, 4, 4, (0, 0, 200), 1.0)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass

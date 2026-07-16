@@ -34,7 +34,8 @@ def test_render_draws_every_piece_and_returns_the_same_canvas():
         3: library.get_clip("P", "w", "idle").frame_at(0),
     }
 
-    result = PieceRenderer(geometry).render(canvas, snapshot, frame_by_piece_id)
+    offset_by_piece_id = {1: (0.0, 0.0), 2: (0.0, 0.0), 3: (0.0, 0.0)}
+    result = PieceRenderer(geometry).render(canvas, snapshot, frame_by_piece_id, offset_by_piece_id)
 
     assert result is canvas
     assert canvas.img.shape[:2] == (geometry.window_height_px, geometry.window_width_px)
@@ -45,6 +46,6 @@ def test_render_with_no_pieces_leaves_the_canvas_untouched():
     canvas = BoardLoader(geometry).fresh_canvas()
     snapshot = GameSnapshot(board_width=8, board_height=8, pieces=[])
 
-    result = PieceRenderer(geometry).render(canvas, snapshot, frame_by_piece_id={})
+    result = PieceRenderer(geometry).render(canvas, snapshot, frame_by_piece_id={}, offset_by_piece_id={})
 
     assert result is canvas

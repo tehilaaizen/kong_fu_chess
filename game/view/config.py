@@ -31,3 +31,15 @@ DEFAULT_PLAYER_NAME_BY_COLOR = {"w": "White", "b": "Black"}
 # is omitted (capturing it already ends the game via a separate win
 # condition, not scored).
 POINT_VALUE_BY_KIND = {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9}
+
+# Cell overlays drawn in code (no image asset - just an alpha-blended
+# fill via Img.overlay_rect). Colors are BGR, alpha is 0..1.
+# Highlight: the legal destinations of a selected piece
+# (view/board/highlight_renderer.py).
+HIGHLIGHT_COLOR = (0, 200, 0)  # green
+HIGHLIGHT_ALPHA = 0.4
+# Rest: a draining hourglass-style overlay on a piece in cooldown
+# (view/board/rest_overlay_renderer.py) - shrinks from full to empty as
+# the cooldown elapses.
+REST_OVERLAY_COLOR = (0, 165, 255)  # amber
+REST_OVERLAY_ALPHA = 0.5
