@@ -12,20 +12,14 @@ class FrameClock:
 
     def __init__(self, time_source: Callable[[], float] = time.perf_counter) -> None:
         self._time_source = time_source
-        self._start = time_source()
-        self._last_tick = self._start
+        self._last_tick = time_source()
 
     def tick_ms(self) -> int:
         """Milliseconds elapsed since the previous tick_ms() call (or
-        since construction, for the first call) - feeds GameEngine.wait()."""
+        since construction, for the first call) - feeds both
+        GameEngine.wait() and PieceAnimatorRegistry.advance_time() with
+        the same value, so visual and engine timing never drift apart."""
         now = self._time_source()
         elapsed = now - self._last_tick
         self._last_tick = now
         return int(elapsed * 1000)
-
-    def now_ms(self) -> int:
-        """Milliseconds elapsed since this clock was constructed - never
-        resets, unlike tick_ms(). Feeds PieceAnimator/PieceAnimatorRegistry,
-        which need a running clock to time how long a piece has been in
-        its current animation state."""
-        return int((self._time_source() - self._start) * 1000)

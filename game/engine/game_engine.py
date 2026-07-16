@@ -7,7 +7,7 @@ from model.board import Board
 from model.piece import Piece
 from model.position import Position
 from pieces.king import King
-from realtime.real_time_arbiter import RealTimeArbiter
+from realtime.real_time_arbiter import ArrivalEvent, RealTimeArbiter
 from rules.rule_engine import OK, RuleEngine
 
 GAME_OVER = "game_over"
@@ -18,11 +18,36 @@ PIECE_RESTING = "piece_resting"
 
 
 class GameObserver(Protocol):
-    """The only capability GameEngine needs from something that wants to
-    be notified of state changes - lets tests inject a lightweight fake
-    instead of a real view-layer object."""
+    """The capabilities GameEngine needs from something that wants to be
+    notified of state changes - lets tests inject a lightweight fake
+    instead of a real view-layer object. Split into narrow per-event
+    hooks (rather than one snapshot push) so a consumer only cares about
+    the timing information it actually needs: e.g. an animator needs to
+    know exactly when a motion/jump starts and for how long, not just
+    that "something changed"."""
 
-    def on_snapshot(self, snapshot: GameSnapshot) -> None:
+    def on_arrival(self, event: ArrivalEvent) -> None:
+        """A motion (move or jump-defense) logically arrived at its
+        destination this tick."""
+        ...
+
+    def on_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
+        """A move was just accepted and started travelling; it will
+        arrive in duration_ms."""
+        ...
+
+    def on_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
+        """A jump was just accepted and started; the piece stays
+        airborne for duration_ms."""
+        ...
+
+    def on_rest_started(self, piece: Piece, duration_ms: int, label: str) -> None:
+        """A cooldown just began (label is "long_rest" after a move or
+        "short_rest" after a jump); it lasts duration_ms."""
+        ...
+
+    def on_game_over(self) -> None:
+        """The game just ended (a king was captured)."""
         ...
 
 
@@ -66,29 +91,42 @@ class GameEngine:
         self._game_over = True
 
     def add_observer(self, observer: GameObserver) -> None:
-        """Register observer to be notified with a fresh snapshot every
-        time wait() advances time - see _notify_observers."""
+        """Register observer to be notified of arrivals, motion/jump
+        starts, and game-over - see request_move/request_jump/wait."""
         self._observers.append(observer)
 
     def snapshot(self) -> GameSnapshot:
-        """A read-only view of the current game state, including each
-        piece's true animation state (move/resting/idle) from
-        RealTimeArbiter."""
-        return GameSnapshot.from_engine(self._board, self._real_time_arbiter)
+        """A read-only view of the current game state: every piece's
+        identity, kind, color and cell. Animation state is not part of
+        this - the view layer tracks it itself, driven by
+        on_motion_started/on_jump_started/on_rest_started."""
+        return GameSnapshot.from_board(self._board)
 
-    def _notify_observers(self) -> None:
-        """Push a fresh snapshot to every registered observer. Called
-        only from wait() - the only point where Board state can actually
-        have changed (an arrival); a click that merely selects or starts
-        a motion doesn't change Board, so it doesn't need its own notify.
-        No-ops (skipping the snapshot build too) when nothing is
-        registered - most tests never register an observer at all."""
-        if not self._observers:
-            return
-
-        snapshot = self.snapshot()
+    def _notify_arrival(self, event: ArrivalEvent) -> None:
+        """Tell every registered observer that event just arrived."""
         for observer in self._observers:
-            observer.on_snapshot(snapshot)
+            observer.on_arrival(event)
+
+    def _notify_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
+        """Tell every registered observer that piece just started moving."""
+        for observer in self._observers:
+            observer.on_motion_started(piece, source, destination, duration_ms)
+
+    def _notify_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
+        """Tell every registered observer that piece just started a jump."""
+        for observer in self._observers:
+            observer.on_jump_started(piece, position, duration_ms)
+
+    def _notify_rest_started(self, piece: Piece, duration_ms: int, label: str) -> None:
+        """Tell every registered observer that piece just started a
+        cooldown."""
+        for observer in self._observers:
+            observer.on_rest_started(piece, duration_ms, label)
+
+    def _notify_game_over(self) -> None:
+        """Tell every registered observer that the game just ended."""
+        for observer in self._observers:
+            observer.on_game_over()
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         """Request a move from source to destination. Rejected outright
@@ -112,7 +150,8 @@ class GameEngine:
         if not validation.is_valid:
             return MoveResult(False, validation.reason)
 
-        self._real_time_arbiter.start_motion(piece, source, destination)
+        duration_ms = self._real_time_arbiter.start_motion(piece, source, destination)
+        self._notify_motion_started(piece, source, destination, duration_ms)
 
         return MoveResult(True, validation.reason)
 
@@ -140,22 +179,28 @@ class GameEngine:
         if self._real_time_arbiter.is_airborne(position):
             return MoveResult(False, ALREADY_AIRBORNE)
 
-        self._real_time_arbiter.start_jump(piece, position)
+        duration_ms = self._real_time_arbiter.start_jump(piece, position)
+        self._notify_jump_started(piece, position, duration_ms)
 
         return MoveResult(True, OK)
 
     def wait(self, ms: int) -> None:
         """Advance simulated time by ms, delegating entirely to
         RealTimeArbiter - GameEngine never touches Board motion state
-        directly. Ends the game if any arrival captured a king, then
-        notifies observers with a fresh snapshot."""
+        directly. Notifies observers of each arrival and each cooldown
+        that started this tick, and ends the game (notifying observers
+        of that too) if any arrival captured a king."""
         events = self._real_time_arbiter.advance_time(ms)
 
         for event in events:
-            if self._ends_the_game(event.captured_piece):
-                self.mark_game_over()
+            self._notify_arrival(event)
 
-        self._notify_observers()
+            if not self.is_game_over() and self._ends_the_game(event.captured_piece):
+                self.mark_game_over()
+                self._notify_game_over()
+
+        for rest_start in self._real_time_arbiter.take_rest_starts():
+            self._notify_rest_started(rest_start.piece, rest_start.duration_ms, rest_start.label)
 
     def _ends_the_game(self, captured_piece: Piece | None) -> bool:
         """Whether capturing captured_piece ends the game. Only the king

@@ -7,6 +7,8 @@ from model.piece import Piece
 from model.position import Position
 
 EMPTY_SQUARE = "."
+MS_PER_CELL = 1000
+JUMP_DURATION_MS = 1000
 
 
 class PieceRules(ABC):
@@ -30,6 +32,19 @@ class PieceRules(ABC):
         """Optional hook for piece-specific post-arrival effects (e.g.
         pawn promotion) - mutates piece in place; default is a no-op."""
         return None
+
+    def get_arrival_duration(self, source: Position, destination: Position) -> int:
+        """Milliseconds this piece kind needs to travel from source to
+        destination - default is a uniform MS_PER_CELL per king-step; a
+        piece kind may override this for a different speed."""
+        distance = max(abs(destination.row - source.row), abs(destination.col - source.col))
+        return distance * MS_PER_CELL
+
+    def get_jump_duration(self) -> int:
+        """Milliseconds this piece kind stays airborne when it jumps -
+        default is a uniform JUMP_DURATION_MS; a piece kind may override
+        this for a different speed."""
+        return JUMP_DURATION_MS
 
 
 def sliding_destinations(

@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+import pathlib
+
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+
+BOARD_WIDTH = 8
+BOARD_HEIGHT = 8
+
+ANIMATION_STATES = ("idle", "move", "jump", "short_rest", "long_rest")
+ANIMATION_FRAME_COUNT = 5
+
+BOARD_IMAGE_PATH = str(PROJECT_ROOT / "assets" / "bord.png")
+PIECES_ASSETS_DIR = PROJECT_ROOT / "assets" / "pieces"
+
+# Pixel offset from the window's top-left corner to the board's own
+# top-left corner along the y-axis - no top/bottom HUD elements exist,
+# so this stays 0. The x-axis offset comes from BoardGeometry's own
+# left_column_width_px instead, since that one genuinely varies (HUD
+# side columns).
+BOARD_PADDING_HEIGHT_PX = 0
+
+# HUD layout: one fixed-width column on each side of the board (left =
+# player 1/white, right = player 2/black), each holding that player's
+# name, score, and (left column) the moves log.
+HUD_COLUMN_WIDTH_PX = 200
+
+DEFAULT_PLAYER_NAME_BY_COLOR = {"w": "White", "b": "Black"}
+
+# Standard chess point values, used only for scoring captures - the king
+# is omitted (capturing it already ends the game via a separate win
+# condition, not scored).
+POINT_VALUE_BY_KIND = {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9}

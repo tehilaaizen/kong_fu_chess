@@ -1,6 +1,7 @@
 from model.board import Board
 from model.piece import CAPTURED, Piece
 from model.position import Position
+from pieces.piece import PieceRules
 from realtime.real_time_arbiter import RealTimeArbiter
 
 
@@ -9,6 +10,23 @@ def _arbiter_with_rook_at(cell):
     piece = Piece(id=1, color="w", kind="R", cell=cell)
     board.add_piece(piece)
     return RealTimeArbiter(board), board, piece
+
+
+class _FixedDurationRules(PieceRules):
+    """A minimal PieceRules stub with hardcoded durations, used to prove
+    RealTimeArbiter delegates duration lookups to piece_rules_by_kind
+    rather than computing them itself."""
+
+    letter = "R"
+
+    def legal_destinations(self, board, piece):
+        return set()
+
+    def get_arrival_duration(self, source, destination):
+        return 42
+
+    def get_jump_duration(self):
+        return 7
 
 
 def test_no_motion_is_active_initially():
@@ -23,6 +41,44 @@ def test_starting_a_motion_makes_it_active():
     arbiter.start_motion(piece, Position(0, 0), Position(0, 2))
 
     assert arbiter.has_active_motion() is True
+
+
+def test_start_motion_returns_1000ms_per_cell_by_default():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+
+    duration = arbiter.start_motion(piece, Position(0, 0), Position(0, 2))
+
+    assert duration == 2000
+
+
+def test_start_jump_returns_1000ms_by_default():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
+
+    duration = arbiter.start_jump(piece, Position(2, 2))
+
+    assert duration == 1000
+
+
+def test_start_motion_delegates_its_duration_to_the_pieces_own_rules():
+    board = Board(width=5, height=5)
+    piece = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    board.add_piece(piece)
+    arbiter = RealTimeArbiter(board, piece_rules_by_kind={"R": _FixedDurationRules()})
+
+    duration = arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+
+    assert duration == 42
+
+
+def test_start_jump_delegates_its_duration_to_the_pieces_own_rules():
+    board = Board(width=5, height=5)
+    piece = Piece(id=1, color="w", kind="R", cell=Position(2, 2))
+    board.add_piece(piece)
+    arbiter = RealTimeArbiter(board, piece_rules_by_kind={"R": _FixedDurationRules()})
+
+    duration = arbiter.start_jump(piece, Position(2, 2))
+
+    assert duration == 7
 
 
 def test_one_square_move_has_not_arrived_after_999ms():
@@ -238,57 +294,61 @@ def test_a_jumper_that_destroys_an_attacker_also_rests_afterward():
     assert arbiter.is_resting(jumper) is False
 
 
-def test_a_piece_is_not_moving_initially():
+def test_take_rest_starts_is_empty_before_any_rest_begins():
     arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
 
-    assert arbiter.is_moving(piece) is False
+    assert arbiter.take_rest_starts() == []
 
 
-def test_a_piece_is_moving_while_its_motion_is_active():
-    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
-    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
-
-    assert arbiter.is_moving(piece) is True
-
-
-def test_a_piece_stops_moving_once_it_arrives():
+def test_take_rest_starts_reports_a_move_rest():
     arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
     arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
 
     arbiter.advance_time(1000)
+    rest_starts = arbiter.take_rest_starts()
 
-    assert arbiter.is_moving(piece) is False
-
-
-def test_resting_label_is_none_when_not_resting():
-    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
-
-    assert arbiter.resting_label(piece) is None
+    assert len(rest_starts) == 1
+    assert rest_starts[0].piece is piece
+    assert rest_starts[0].duration_ms == 5000
+    assert rest_starts[0].label == "long_rest"
 
 
-def test_resting_label_is_long_rest_after_a_move():
-    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
-    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
-
-    arbiter.advance_time(1000)
-
-    assert arbiter.resting_label(piece) == "long_rest"
-
-
-def test_resting_label_is_short_rest_after_a_jump():
+def test_take_rest_starts_reports_a_jump_rest():
     arbiter, _, piece = _arbiter_with_rook_at(Position(2, 2))
     arbiter.start_jump(piece, Position(2, 2))
 
     arbiter.advance_time(1000)  # jump expires, short rest begins
+    rest_starts = arbiter.take_rest_starts()
 
-    assert arbiter.resting_label(piece) == "short_rest"
+    assert len(rest_starts) == 1
+    assert rest_starts[0].piece is piece
+    assert rest_starts[0].duration_ms == 3000
+    assert rest_starts[0].label == "short_rest"
 
 
-def test_resting_label_reverts_to_none_once_the_cooldown_ends():
+def test_take_rest_starts_reports_a_jumper_defending_against_an_attacker():
+    board = Board(width=5, height=5)
+    jumper = Piece(id=1, color="b", kind="K", cell=Position(1, 2))
+    board.add_piece(jumper)
+    attacker = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(attacker)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_jump(jumper, Position(1, 2))
+    arbiter.start_motion(attacker, Position(0, 2), Position(1, 2))
+    arbiter.advance_time(1000)
+    rest_starts = arbiter.take_rest_starts()
+
+    assert len(rest_starts) == 1
+    assert rest_starts[0].piece is jumper
+    assert rest_starts[0].label == "short_rest"
+
+
+def test_take_rest_starts_clears_after_being_read():
     arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
     arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
     arbiter.advance_time(1000)
 
-    arbiter.advance_time(5000)
+    arbiter.take_rest_starts()
 
-    assert arbiter.resting_label(piece) is None
+    assert arbiter.take_rest_starts() == []

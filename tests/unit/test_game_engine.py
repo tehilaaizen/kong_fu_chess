@@ -10,7 +10,7 @@ from model.board import Board
 from model.piece import Piece
 from model.position import Position
 from pieces.rook import Rook
-from realtime.real_time_arbiter import ArrivalEvent, RealTimeArbiter
+from realtime.real_time_arbiter import ArrivalEvent, RealTimeArbiter, RestStartedEvent
 from rules.rule_engine import ILLEGAL_PIECE_MOVE, OK, RuleEngine
 
 
@@ -37,11 +37,17 @@ class SpyRealTimeArbiter:
         events_to_return: list | None = None,
         is_airborne: bool = False,
         is_resting: bool = False,
+        motion_duration_ms: int = 1000,
+        jump_duration_ms: int = 1000,
+        rest_starts_to_return: list | None = None,
     ) -> None:
         self._has_active_motion = has_active_motion
         self._events_to_return = events_to_return or []
         self._is_airborne = is_airborne
         self._is_resting = is_resting
+        self._motion_duration_ms = motion_duration_ms
+        self._jump_duration_ms = jump_duration_ms
+        self._rest_starts_to_return = rest_starts_to_return or []
         self.start_motion_calls: list[tuple] = []
         self.advance_time_calls: list[int] = []
         self.start_jump_calls: list[tuple] = []
@@ -49,8 +55,9 @@ class SpyRealTimeArbiter:
     def has_active_motion(self) -> bool:
         return self._has_active_motion
 
-    def start_motion(self, piece, source, destination) -> None:
+    def start_motion(self, piece, source, destination) -> int:
         self.start_motion_calls.append((piece, source, destination))
+        return self._motion_duration_ms
 
     def advance_time(self, ms: int) -> list:
         self.advance_time_calls.append(ms)
@@ -59,11 +66,15 @@ class SpyRealTimeArbiter:
     def is_airborne(self, position) -> bool:
         return self._is_airborne
 
-    def start_jump(self, piece, cell) -> None:
+    def start_jump(self, piece, cell) -> int:
         self.start_jump_calls.append((piece, cell))
+        return self._jump_duration_ms
 
     def is_resting(self, piece) -> bool:
         return self._is_resting
+
+    def take_rest_starts(self) -> list:
+        return self._rest_starts_to_return
 
 
 def _engine():
@@ -279,52 +290,155 @@ def test_request_jump_rejects_a_resting_piece():
 
 
 class SpyObserver:
-    """Records every snapshot it's notified with."""
+    """Records every notification it receives, split by event type."""
 
     def __init__(self) -> None:
-        self.snapshots: list = []
+        self.arrivals: list = []
+        self.motions_started: list = []
+        self.jumps_started: list = []
+        self.rests_started: list = []
+        self.game_overs: int = 0
 
-    def on_snapshot(self, snapshot) -> None:
-        self.snapshots.append(snapshot)
+    def on_arrival(self, event) -> None:
+        self.arrivals.append(event)
+
+    def on_motion_started(self, piece, source, destination, duration_ms) -> None:
+        self.motions_started.append((piece, source, destination, duration_ms))
+
+    def on_jump_started(self, piece, position, duration_ms) -> None:
+        self.jumps_started.append((piece, position, duration_ms))
+
+    def on_rest_started(self, piece, duration_ms, label) -> None:
+        self.rests_started.append((piece, duration_ms, label))
+
+    def on_game_over(self) -> None:
+        self.game_overs += 1
 
 
-def test_wait_notifies_a_registered_observer_with_a_snapshot():
-    engine, board, _ = _engine()
+def test_wait_notifies_a_registered_observer_on_arrival():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=None)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
     observer = SpyObserver()
     engine.add_observer(observer)
 
-    engine.wait(0)
+    engine.wait(1000)
 
-    assert len(observer.snapshots) == 1
-    assert observer.snapshots[0].pieces[0].kind == "R"
+    assert observer.arrivals == [event]
 
 
-def test_wait_notifies_every_registered_observer():
-    engine, _, _ = _engine()
+def test_wait_notifies_every_registered_observer_on_arrival():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=None)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
     first, second = SpyObserver(), SpyObserver()
     engine.add_observer(first)
     engine.add_observer(second)
 
-    engine.wait(0)
+    engine.wait(1000)
 
-    assert len(first.snapshots) == 1
-    assert len(second.snapshots) == 1
+    assert len(first.arrivals) == 1
+    assert len(second.arrivals) == 1
 
 
-def test_snapshot_reports_move_state_while_a_motion_is_active():
-    engine, board, _ = _engine()
+def test_wait_notifies_on_game_over_when_an_arrival_captures_the_king():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    king = Piece(id=2, color="b", kind="K", cell=Position(0, 1))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=king)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.wait(1000)
+
+    assert observer.game_overs == 1
+
+
+def test_wait_does_not_notify_on_game_over_when_no_king_is_captured():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=None)
+    real_time_arbiter = SpyRealTimeArbiter(events_to_return=[event])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.wait(1000)
+
+    assert observer.game_overs == 0
+
+
+def test_request_move_notifies_on_motion_started_with_the_real_arbiters_duration():
+    engine, _, _ = _engine()
+    observer = SpyObserver()
+    engine.add_observer(observer)
 
     engine.request_move(Position(2, 2), Position(2, 4))
-    snapshot = engine.snapshot()
 
-    assert snapshot.pieces[0].state == "move"
+    assert len(observer.motions_started) == 1
+    piece, source, destination, duration_ms = observer.motions_started[0]
+    assert (source, destination) == (Position(2, 2), Position(2, 4))
+    assert duration_ms == 2000  # 2 cells, 1000ms each
 
 
-def test_snapshot_reports_long_rest_after_a_move_arrives():
+def test_request_move_does_not_notify_on_an_illegal_move():
+    engine, _, _ = _engine()
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.request_move(Position(2, 2), Position(3, 3))
+
+    assert observer.motions_started == []
+
+
+def test_request_jump_notifies_on_jump_started():
+    engine, _, _ = _engine()
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.request_jump(Position(2, 2))
+
+    assert len(observer.jumps_started) == 1
+    piece, position, duration_ms = observer.jumps_started[0]
+    assert position == Position(2, 2)
+    assert duration_ms == 1000
+
+
+def test_request_jump_does_not_notify_on_an_empty_cell():
+    engine, _, _ = _engine()
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.request_jump(Position(0, 0))
+
+    assert observer.jumps_started == []
+
+
+def test_snapshot_reports_every_pieces_identity_kind_color_and_cell():
     engine, board, _ = _engine()
 
-    engine.request_move(Position(2, 2), Position(2, 4))
-    engine.wait(2000)
     snapshot = engine.snapshot()
 
-    assert snapshot.pieces[0].state == "long_rest"
+    assert snapshot.pieces[0].kind == "R"
+    assert snapshot.pieces[0].color == "w"
+    assert snapshot.pieces[0].cell == Position(2, 2)
+
+
+def test_wait_notifies_on_rest_started_for_each_rest_the_arbiter_reports():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    rest_start = RestStartedEvent(piece=rook, duration_ms=5000, label="long_rest")
+    real_time_arbiter = SpyRealTimeArbiter(rest_starts_to_return=[rest_start])
+    engine = GameEngine(board, RuleEngine(), real_time_arbiter)
+    observer = SpyObserver()
+    engine.add_observer(observer)
+
+    engine.wait(1000)
+
+    assert observer.rests_started == [(rook, 5000, "long_rest")]
