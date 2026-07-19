@@ -138,18 +138,20 @@ class GameEngine:
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         """Request a move from source to destination. Rejected outright
         with reason game_over if the game already ended, motion_in_progress
-        if another motion is still travelling, or piece_resting if the
-        source piece is still in cooldown from its last move/jump.
-        Otherwise delegated to RuleEngine; a legal move starts a motion
-        through RealTimeArbiter (it does not relocate the piece itself -
-        that happens only on arrival, once wait() advances time enough)."""
+        if the source piece is itself still travelling from a previous
+        move, or piece_resting if it's still in cooldown from its last
+        move/jump. Other pieces moving at the same time are fine - this is
+        real-time chess, so the guard is per-piece, not global. Otherwise
+        delegated to RuleEngine; a legal move starts a motion through
+        RealTimeArbiter (it does not relocate the piece itself - that
+        happens only on arrival, once wait() advances time enough)."""
         if self.is_game_over():
             return MoveResult(False, GAME_OVER)
 
-        if self._real_time_arbiter.has_active_motion():
+        piece = self._board.piece_at(source)
+        if piece is not None and self._real_time_arbiter.is_moving(piece):
             return MoveResult(False, MOTION_IN_PROGRESS)
 
-        piece = self._board.piece_at(source)
         if piece is not None and self._real_time_arbiter.is_resting(piece):
             return MoveResult(False, PIECE_RESTING)
 
@@ -169,16 +171,18 @@ class GameEngine:
         never consults RuleEngine - a jump isn't a chess move, so there's
         no destination-legality question, only the same application-level
         guards (game_over, motion_in_progress, piece_resting) plus
-        jump-specific ones (empty_cell, already_airborne)."""
+        jump-specific ones (empty_cell, already_airborne). The
+        motion_in_progress guard is per-piece: other pieces may be moving
+        at the same time (real-time chess)."""
         if self.is_game_over():
             return MoveResult(False, GAME_OVER)
-
-        if self._real_time_arbiter.has_active_motion():
-            return MoveResult(False, MOTION_IN_PROGRESS)
 
         piece = self._board.piece_at(position)
         if piece is None:
             return MoveResult(False, EMPTY_CELL)
+
+        if self._real_time_arbiter.is_moving(piece):
+            return MoveResult(False, MOTION_IN_PROGRESS)
 
         if self._real_time_arbiter.is_resting(piece):
             return MoveResult(False, PIECE_RESTING)

@@ -31,19 +31,3 @@ class MovesLogData:
 
         self._lines.insert(0, line)
         self._lines = self._lines[: self._max_lines]
-
-    def on_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
-        """GameObserver hook: the log only reacts to arrivals."""
-        return None
-
-    def on_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
-        """GameObserver hook: the log only reacts to arrivals."""
-        return None
-
-    def on_rest_started(self, piece: Piece, duration_ms: int, label: str) -> None:
-        """GameObserver hook: the log only reacts to arrivals."""
-        return None
-
-    def on_game_over(self) -> None:
-        """GameObserver hook: the log only reacts to arrivals."""
-        return None

@@ -43,6 +43,43 @@ def test_starting_a_motion_makes_it_active():
     assert arbiter.has_active_motion() is True
 
 
+def test_is_moving_is_false_before_the_piece_starts_a_motion():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+
+    assert arbiter.is_moving(piece) is False
+
+
+def test_is_moving_is_true_for_the_piece_that_started_a_motion():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 2))
+
+    assert arbiter.is_moving(piece) is True
+
+
+def test_is_moving_is_false_for_a_different_piece_while_one_is_moving():
+    board = Board(width=5, height=5)
+    mover = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    other = Piece(id=2, color="w", kind="R", cell=Position(4, 4))
+    board.add_piece(mover)
+    board.add_piece(other)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_motion(mover, Position(0, 0), Position(0, 2))
+
+    assert arbiter.is_moving(mover) is True
+    assert arbiter.is_moving(other) is False
+
+
+def test_is_moving_is_false_again_once_the_piece_arrives():
+    arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
+    arbiter.start_motion(piece, Position(0, 0), Position(0, 1))
+
+    arbiter.advance_time(1000)
+
+    assert arbiter.is_moving(piece) is False
+
+
 def test_start_motion_returns_1000ms_per_cell_by_default():
     arbiter, _, piece = _arbiter_with_rook_at(Position(0, 0))
 
@@ -205,7 +242,14 @@ def test_an_attacker_arriving_at_an_airborne_cell_is_destroyed_and_the_jumper_su
     assert board.piece_at(Position(1, 2)) is jumper
     assert board.is_empty(Position(0, 2))
     assert attacker.state == CAPTURED
-    assert events == []
+    # The defensive kill is reported as an arrival crediting the jumper
+    # with capturing the attacker, so observers (e.g. scoring) hear about
+    # it exactly like any other capture.
+    assert len(events) == 1
+    assert events[0].piece is jumper
+    assert events[0].captured_piece is attacker
+    assert events[0].source == Position(1, 2)
+    assert events[0].destination == Position(1, 2)
 
 
 def test_after_a_jump_expires_an_arriving_attacker_captures_normally():

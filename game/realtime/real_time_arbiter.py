@@ -66,6 +66,13 @@ class RealTimeArbiter:
         """Whether any motion is still travelling."""
         return len(self._active_motions) > 0
 
+    def is_moving(self, piece: Piece) -> bool:
+        """Whether this specific piece currently has a motion in flight,
+        so it can't be redirected until it arrives. Unlike
+        has_active_motion(), this asks about one piece - other pieces are
+        free to move at the same time (this is real-time chess)."""
+        return any(motion.piece is piece for motion in self._active_motions)
+
     def is_resting(self, piece: Piece) -> bool:
         """Whether piece is currently in cooldown (after a move or a
         jump) and cannot move or jump again yet."""
@@ -131,7 +138,7 @@ class RealTimeArbiter:
         events: list[ArrivalEvent] = []
         for motion in arrived:
             if self.is_airborne(motion.destination):
-                self._resolve_airborne_defense(motion)
+                events.append(self._resolve_airborne_defense(motion))
                 continue
 
             captured_piece = self._board.piece_at(motion.destination)
@@ -157,16 +164,21 @@ class RealTimeArbiter:
 
         return events
 
-    def _resolve_airborne_defense(self, motion: Motion) -> None:
+    def _resolve_airborne_defense(self, motion: Motion) -> ArrivalEvent:
         """An attacker arrived at a cell whose piece is still airborne
         (mid-jump): the jumper destroys the attacker and stays put,
         surviving into its own (short) cooldown - it "used up" its jump
-        just as if it had expired naturally."""
+        just as if it had expired naturally. Reported as an ArrivalEvent
+        crediting the jumper with capturing the attacker, so scoring (and
+        the king-capture win condition) treat the defensive kill like any
+        other capture - the jumper is both the arriving piece and the one
+        left standing on the cell."""
         jumper = next(jump.piece for jump in self._airborne if jump.cell == motion.destination)
         self._clear_airborne(motion.destination)
         self._start_rest(jumper, JUMP_REST_DURATION_MS, SHORT_REST)
         self._board.remove_piece(motion.source)
         motion.piece.state = CAPTURED
+        return ArrivalEvent(jumper, motion.destination, motion.destination, motion.piece)
 
     def _clear_airborne(self, cell: Position) -> None:
         """Remove the jump record for cell (it has just been resolved by

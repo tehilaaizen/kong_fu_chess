@@ -63,11 +63,11 @@ Kung Fu Chess is a real-time chess-like game: pieces move by chess movement patt
 14. The text integration DSL contains only `Board`, `click`, `wait`, `print board`.
 15. `print board` is the only integration-test assertion mechanism.
 
-**One active motion at a time (common route):** if a legal-looking move is requested while a motion is already active, `GameEngine` rejects it with reason `"motion_in_progress"`. No new motion starts and `Board` remains unchanged.
+**Per-piece motion (real-time):** multiple pieces may travel at the same time — this is real-time chess (Extra Route Rule 1 below, now adopted into the common route). A move is rejected with reason `"motion_in_progress"` only when *that same piece* is already travelling from an earlier move; other pieces moving concurrently never block it. A rejected request starts no new motion and leaves `Board` unchanged.
 
 ### Extra Route Rules (one per strong team, after common route is clean)
 
-1. Simultaneous movement of multiple pieces.
+1. Simultaneous movement of multiple pieces. *(Adopted into the common route — the `motion_in_progress` guard is per-piece, not global.)*
 2. Cooldown after movement.
 3. Collision between moving pieces.
 4. Cancellation when the destination becomes occupied before arrival.
@@ -199,9 +199,9 @@ Answers: *given source/destination, is this command legal now?*
 
 ## 9. GameEngine Design
 
-The application-service coordinator and public command boundary used by Controller and TextTestRunner. Answers: is the game over? is a motion already active? does this move pass RuleEngine? should a validated move start a Motion? should time advance? what snapshot goes to the renderer?
+The application-service coordinator and public command boundary used by Controller and TextTestRunner. Answers: is the game over? is this piece already in motion? does this move pass RuleEngine? should a validated move start a Motion? should time advance? what snapshot goes to the renderer?
 
-Responsibilities: hold/reference `GameState` (incl. `game_over`); reject `request_move` when `game_over` (`MoveResult(reason="game_over")`) or when a motion is already active (`MoveResult(reason="motion_in_progress")`); call `RuleEngine.validate_move` only after those guards pass; start motions via `RealTimeArbiter`; delegate `wait(ms)` to `RealTimeArbiter.advance_time(ms)`; receive king-capture notification from arrival resolution and set `game_over`; build `GameSnapshot`.
+Responsibilities: hold/reference `GameState` (incl. `game_over`); reject `request_move` when `game_over` (`MoveResult(reason="game_over")`) or when the source piece is itself already in motion (`MoveResult(reason="motion_in_progress")`) — a per-piece guard, so other pieces travelling at the same time don't block it; call `RuleEngine.validate_move` only after those guards pass; start motions via `RealTimeArbiter`; delegate `wait(ms)` to `RealTimeArbiter.advance_time(ms)`; receive king-capture notification from arrival resolution and set `game_over`; build `GameSnapshot`.
 
 Must **not** contain piece-specific movement logic, pixel mapping, rendering code, text parsing, or test-runner logic.
 
@@ -315,7 +315,7 @@ Both unit tests ("is this component correct in isolation?") and text integration
 2. **Pixel mapping and selection** — `BoardMapper` + Controller selection state, no piece movement yet. Integration tests never assert selection directly.
 3. **Rook movement without time** — first `PieceRules` implementation; proves capture *eligibility*, not capture execution.
 4. **GameEngine command path without time** — click→click routes through Controller→GameEngine→RuleEngine with `MoveResult`; no `wait`/arrival yet.
-5. **Real-time movement** — `wait(ms)`, active motions, arrival, one-motion-at-a-time (`"motion_in_progress"`). First full click-click-wait-print vertical slice.
+5. **Real-time movement** — `wait(ms)`, active motions, arrival, per-piece `"motion_in_progress"` guard (multiple pieces may move at once). First full click-click-wait-print vertical slice.
 6. **Captures and king-capture win condition** — arrival-time capture, `game_over` flag, rejection after game over.
 7. **More pieces** — bishop, queen, knight, king, pawn; unit tests per piece + one integration test each.
 8. **Invalid moves and error stability** — stable validation/application reasons; invalid commands never mutate state or start motions.
@@ -333,7 +333,7 @@ Both unit tests ("is this component correct in isolation?") and text integration
 - Live `Board`/`Piece` objects passed into Renderer → Renderer gets read-only `GameSnapshot` only.
 - Active `Motion` objects stored inside `Board` → they belong to `RealTimeArbiter`.
 - `BoardParser` hidden inside `texttests` → it's a shared `io/` adapter.
-- A second common-route move starting while one is active → reject with `"motion_in_progress"`.
+- Redirecting a piece that is itself still travelling → reject with `"motion_in_progress"` (a per-piece guard; other pieces may move concurrently).
 - Outside-board second click treated inconsistently → no selection = ignored; selection active = cancels, sends nothing.
 - Testing arrival before real-time movement exists (iteration 4 vs 5 mixed up).
 
@@ -349,11 +349,12 @@ GameEngine.wait(ms) -> None
 GameEngine.snapshot() -> GameSnapshot
 RuleEngine.validate_move(board, source, destination) -> MoveValidation
 RealTimeArbiter.has_active_motion() -> bool
+RealTimeArbiter.is_moving(piece) -> bool
 RealTimeArbiter.start_motion(piece, source, destination) -> None
 RealTimeArbiter.advance_time(ms) -> ArrivalEvents
 ```
 
-`GameEngine.request_move` checks `game_over` and `motion_in_progress` **before** delegating to `RuleEngine`; `RuleEngine` doesn't know about either condition.
+`GameEngine.request_move` checks `game_over` and the per-piece `motion_in_progress` guard **before** delegating to `RuleEngine`; `RuleEngine` doesn't know about either condition.
 
 ## 20. Definition of Done
 

@@ -47,6 +47,7 @@ class SpyRealTimeArbiter:
         has_active_motion: bool = False,
         events_to_return: list | None = None,
         is_airborne: bool = False,
+        is_moving: bool = False,
         is_resting: bool = False,
         motion_duration_ms: int = 1000,
         jump_duration_ms: int = 1000,
@@ -55,6 +56,7 @@ class SpyRealTimeArbiter:
         self._has_active_motion = has_active_motion
         self._events_to_return = events_to_return or []
         self._is_airborne = is_airborne
+        self._is_moving = is_moving
         self._is_resting = is_resting
         self._motion_duration_ms = motion_duration_ms
         self._jump_duration_ms = jump_duration_ms
@@ -76,6 +78,9 @@ class SpyRealTimeArbiter:
 
     def is_airborne(self, position) -> bool:
         return self._is_airborne
+
+    def is_moving(self, piece) -> bool:
+        return self._is_moving
 
     def start_jump(self, piece, cell) -> int:
         self.start_jump_calls.append((piece, cell))
@@ -150,10 +155,28 @@ def test_rejects_a_move_while_another_motion_is_active():
     assert result.reason == MOTION_IN_PROGRESS
 
 
+def test_two_different_pieces_can_move_at_the_same_time():
+    board = Board(width=5, height=5)
+    board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
+    board.add_piece(Piece(id=2, color="w", kind="R", cell=Position(4, 4)))
+    arbiter = RealTimeArbiter(board)
+    engine = GameEngine(board, RuleEngine(piece_rules_by_kind={"R": Rook()}), arbiter)
+    first_piece = board.piece_at(Position(0, 0))
+    second_piece = board.piece_at(Position(4, 4))
+
+    first = engine.request_move(Position(0, 0), Position(0, 3))
+    second = engine.request_move(Position(4, 4), Position(4, 1))  # while the first is still travelling
+
+    assert first.is_accepted is True
+    assert second.is_accepted is True
+    assert arbiter.is_moving(first_piece) is True
+    assert arbiter.is_moving(second_piece) is True
+
+
 def test_motion_in_progress_guard_runs_before_rule_engine_validation():
     board = Board(width=3, height=3)
     board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
-    engine = GameEngine(board, SpyRuleEngine(), SpyRealTimeArbiter(has_active_motion=True))
+    engine = GameEngine(board, SpyRuleEngine(), SpyRealTimeArbiter(is_moving=True))
 
     result = engine.request_move(Position(0, 0), Position(0, 1))
 
@@ -271,7 +294,7 @@ def test_request_jump_rejects_when_the_game_is_over():
 def test_request_jump_rejects_while_a_motion_is_active():
     board = Board(width=3, height=3)
     board.add_piece(Piece(id=1, color="w", kind="R", cell=Position(0, 0)))
-    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter(has_active_motion=True))
+    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter(is_moving=True))
 
     result = engine.request_jump(Position(0, 0))
 
