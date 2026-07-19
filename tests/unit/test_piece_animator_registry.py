@@ -1,3 +1,10 @@
+from engine.game_engine import (
+    ArrivalObserver,
+    GameOverObserver,
+    JumpStartedObserver,
+    MotionStartedObserver,
+    RestStartedObserver,
+)
 from engine.game_snapshot import GameSnapshot, PiecePlacement
 from model.piece import Piece
 from model.position import Position
@@ -144,7 +151,11 @@ def test_resting_overlays_lists_only_resting_pieces_with_their_fraction():
     assert registry.resting_overlays(snapshot) == [(Position(3, 3), 0.75)]
 
 
-def test_on_game_over_does_not_raise():
+def test_the_registry_declares_every_hook_except_game_over():
     registry = _registry()
 
-    registry.on_game_over()
+    assert isinstance(registry, ArrivalObserver)
+    assert isinstance(registry, MotionStartedObserver)
+    assert isinstance(registry, JumpStartedObserver)
+    assert isinstance(registry, RestStartedObserver)
+    assert not isinstance(registry, GameOverObserver)

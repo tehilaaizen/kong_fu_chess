@@ -51,6 +51,8 @@ def _window(extractor=None, command_sender=None):
         moves_log_renderer=None,
         moves_log_data=None,
         player_panel_renderer=None,
+        game_over_renderer=None,
+        game_over_data=None,
     )
 
 

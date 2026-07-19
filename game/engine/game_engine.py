@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from engine.game_snapshot import GameSnapshot
 from model.board import Board
@@ -17,38 +17,62 @@ ALREADY_AIRBORNE = "already_airborne"
 PIECE_RESTING = "piece_resting"
 
 
-class GameObserver(Protocol):
-    """The capabilities GameEngine needs from something that wants to be
-    notified of state changes - lets tests inject a lightweight fake
-    instead of a real view-layer object. Split into narrow per-event
-    hooks (rather than one snapshot push) so a consumer only cares about
-    the timing information it actually needs: e.g. an animator needs to
-    know exactly when a motion/jump starts and for how long, not just
-    that "something changed"."""
+@runtime_checkable
+class ArrivalObserver(Protocol):
+    """Notified when a motion (move or jump-defense) logically arrived at
+    its destination this tick."""
 
     def on_arrival(self, event: ArrivalEvent) -> None:
-        """A motion (move or jump-defense) logically arrived at its
-        destination this tick."""
+        """Handle the arrival described by event."""
         ...
+
+
+@runtime_checkable
+class MotionStartedObserver(Protocol):
+    """Notified when a move was accepted and started travelling."""
 
     def on_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
-        """A move was just accepted and started travelling; it will
-        arrive in duration_ms."""
+        """Handle piece starting to travel; it arrives in duration_ms."""
         ...
+
+
+@runtime_checkable
+class JumpStartedObserver(Protocol):
+    """Notified when a jump was accepted and the piece went airborne."""
 
     def on_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
-        """A jump was just accepted and started; the piece stays
-        airborne for duration_ms."""
+        """Handle piece going airborne at position for duration_ms."""
         ...
+
+
+@runtime_checkable
+class RestStartedObserver(Protocol):
+    """Notified when a piece entered a cooldown."""
 
     def on_rest_started(self, piece: Piece, duration_ms: int, label: str) -> None:
-        """A cooldown just began (label is "long_rest" after a move or
-        "short_rest" after a jump); it lasts duration_ms."""
+        """Handle piece resting for duration_ms; label is "long_rest"
+        after a move or "short_rest" after a jump."""
         ...
 
+
+@runtime_checkable
+class GameOverObserver(Protocol):
+    """Notified when the game ended (a king was captured)."""
+
     def on_game_over(self) -> None:
-        """The game just ended (a king was captured)."""
+        """Handle the game ending."""
         ...
+
+
+# Anything GameEngine can notify: an observer implements one narrow
+# protocol per event it cares about, rather than a single wide one that
+# forces empty no-op hooks for the events it ignores. add_observer works
+# out which of these an object satisfies and subscribes it to exactly
+# those - so ScoreData declares only on_arrival, while
+# PieceAnimatorRegistry declares the four hooks it actually reacts to.
+GameObserver = (
+    ArrivalObserver | MotionStartedObserver | JumpStartedObserver | RestStartedObserver | GameOverObserver
+)
 
 
 class MoveResult:
@@ -80,7 +104,11 @@ class GameEngine:
         self._rule_engine = rule_engine
         self._real_time_arbiter = real_time_arbiter
         self._game_over = False
-        self._observers: list[GameObserver] = []
+        self._arrival_observers: list[ArrivalObserver] = []
+        self._motion_started_observers: list[MotionStartedObserver] = []
+        self._jump_started_observers: list[JumpStartedObserver] = []
+        self._rest_started_observers: list[RestStartedObserver] = []
+        self._game_over_observers: list[GameOverObserver] = []
 
     def is_game_over(self) -> bool:
         """Whether the game has already ended."""
@@ -91,9 +119,25 @@ class GameEngine:
         self._game_over = True
 
     def add_observer(self, observer: GameObserver) -> None:
-        """Register observer to be notified of arrivals, motion/jump
-        starts, and game-over - see request_move/request_jump/wait."""
-        self._observers.append(observer)
+        """Subscribe observer to exactly those events it declares a hook
+        for, so it never has to write empty no-op methods for the ones it
+        ignores. Rejects an observer with no hooks at all, which would
+        otherwise be silently subscribed to nothing - the likely cause is
+        a misspelled hook name."""
+        subscriptions = (
+            (ArrivalObserver, self._arrival_observers),
+            (MotionStartedObserver, self._motion_started_observers),
+            (JumpStartedObserver, self._jump_started_observers),
+            (RestStartedObserver, self._rest_started_observers),
+            (GameOverObserver, self._game_over_observers),
+        )
+
+        matched = [observers for protocol, observers in subscriptions if isinstance(observer, protocol)]
+        if not matched:
+            raise ValueError(f"{type(observer).__name__} implements no observer hook")
+
+        for observers in matched:
+            observers.append(observer)
 
     def snapshot(self) -> GameSnapshot:
         """A read-only view of the current game state: every piece's
@@ -110,29 +154,29 @@ class GameEngine:
         return self._rule_engine.legal_destinations(self._board, source)
 
     def _notify_arrival(self, event: ArrivalEvent) -> None:
-        """Tell every registered observer that event just arrived."""
-        for observer in self._observers:
+        """Tell every arrival observer that event just arrived."""
+        for observer in self._arrival_observers:
             observer.on_arrival(event)
 
     def _notify_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
-        """Tell every registered observer that piece just started moving."""
-        for observer in self._observers:
+        """Tell every motion-started observer that piece started moving."""
+        for observer in self._motion_started_observers:
             observer.on_motion_started(piece, source, destination, duration_ms)
 
     def _notify_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
-        """Tell every registered observer that piece just started a jump."""
-        for observer in self._observers:
+        """Tell every jump-started observer that piece started a jump."""
+        for observer in self._jump_started_observers:
             observer.on_jump_started(piece, position, duration_ms)
 
     def _notify_rest_started(self, piece: Piece, duration_ms: int, label: str) -> None:
-        """Tell every registered observer that piece just started a
+        """Tell every rest-started observer that piece started a
         cooldown."""
-        for observer in self._observers:
+        for observer in self._rest_started_observers:
             observer.on_rest_started(piece, duration_ms, label)
 
     def _notify_game_over(self) -> None:
-        """Tell every registered observer that the game just ended."""
-        for observer in self._observers:
+        """Tell every game-over observer that the game just ended."""
+        for observer in self._game_over_observers:
             observer.on_game_over()
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:

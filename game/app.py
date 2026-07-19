@@ -20,6 +20,8 @@ from view.board.highlight_renderer import HighlightRenderer
 from view.board.rest_overlay_renderer import RestOverlayRenderer
 from view.config import DEFAULT_PLAYER_NAME_BY_COLOR
 from view.frame_clock import FrameClock
+from view.game_over.game_over_data import GameOverData
+from view.game_over.game_over_renderer import GameOverRenderer
 from view.geometry import BoardGeometry
 from view.hud.moves_log.moves_log_data import MovesLogData
 from view.hud.moves_log.moves_log_renderer import MovesLogRenderer
@@ -64,6 +66,8 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
     game_engine.add_observer(score_data)
     moves_log_data = MovesLogData()
     game_engine.add_observer(moves_log_data)
+    game_over_data = GameOverData()
+    game_engine.add_observer(game_over_data)
 
     window = GameWindow(
         board_renderer=BoardRenderer(BoardLoader(geometry)),
@@ -81,6 +85,8 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
         moves_log_renderer=MovesLogRenderer(geometry),
         moves_log_data=moves_log_data,
         player_panel_renderer=PlayerPanelRenderer(geometry, player_name_by_color),
+        game_over_renderer=GameOverRenderer(geometry),
+        game_over_data=game_over_data,
     )
     window.run()
 

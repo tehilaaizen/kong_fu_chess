@@ -1,3 +1,5 @@
+import pytest
+
 from engine.game_engine import (
     ALREADY_AIRBORNE,
     EMPTY_CELL,
@@ -347,6 +349,46 @@ class SpyObserver:
 
     def on_game_over(self) -> None:
         self.game_overs += 1
+
+
+class ArrivalOnlyObserver:
+    """Declares the arrival hook and nothing else - the shape ScoreData
+    and MovesLogData have, proving a partial observer is never called for
+    events it didn't subscribe to."""
+
+    def __init__(self) -> None:
+        self.arrivals: list = []
+
+    def on_arrival(self, event) -> None:
+        self.arrivals.append(event)
+
+
+def test_an_observer_is_only_notified_of_events_it_declares_a_hook_for():
+    board = Board(width=3, height=3)
+    rook = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
+    board.add_piece(rook)
+    event = ArrivalEvent(piece=rook, source=Position(0, 0), destination=Position(0, 1), captured_piece=None)
+    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter(events_to_return=[event]))
+    observer = ArrivalOnlyObserver()
+    engine.add_observer(observer)
+
+    # None of these may reach an observer without the matching hook.
+    engine.request_move(Position(0, 0), Position(0, 1))
+    engine.request_jump(Position(0, 0))
+    engine.wait(1000)
+
+    assert observer.arrivals == [event]
+
+
+def test_adding_an_observer_with_no_hooks_at_all_is_rejected():
+    board = Board(width=3, height=3)
+    engine = GameEngine(board, RuleEngine(), SpyRealTimeArbiter())
+
+    class NotAnObserver:
+        pass
+
+    with pytest.raises(ValueError):
+        engine.add_observer(NotAnObserver())
 
 
 def test_wait_notifies_a_registered_observer_on_arrival():

@@ -13,6 +13,8 @@ from view.board.board_renderer import BoardRenderer
 from view.board.highlight_renderer import HighlightRenderer
 from view.board.rest_overlay_renderer import RestOverlayRenderer
 from view.frame_clock import FrameClock
+from view.game_over.game_over_data import GameOverData
+from view.game_over.game_over_renderer import GameOverRenderer
 from view.hud.moves_log.moves_log_data import MovesLogData
 from view.hud.moves_log.moves_log_renderer import MovesLogRenderer
 from view.hud.player_panel.player_panel_renderer import PlayerPanelRenderer
@@ -73,6 +75,8 @@ class GameWindow:
         moves_log_renderer: MovesLogRenderer,
         moves_log_data: MovesLogData,
         player_panel_renderer: PlayerPanelRenderer,
+        game_over_renderer: GameOverRenderer,
+        game_over_data: GameOverData,
         window_name: str = DEFAULT_WINDOW_NAME,
     ) -> None:
         self._board_renderer = board_renderer
@@ -90,6 +94,8 @@ class GameWindow:
         self._moves_log_renderer = moves_log_renderer
         self._moves_log_data = moves_log_data
         self._player_panel_renderer = player_panel_renderer
+        self._game_over_renderer = game_over_renderer
+        self._game_over_data = game_over_data
         self._window_name = window_name
 
     def _on_mouse_event(self, event: int, x: int, y: int, flags: int, userdata: object) -> None:
@@ -140,7 +146,9 @@ class GameWindow:
             self._piece_renderer.render(canvas, snapshot, frames, offsets)
             self._player_panel_renderer.render(canvas)
             self._score_renderer.render(canvas, self._score_data)
-            self._moves_log_renderer.render(canvas, self._moves_log_data).show_frame(self._window_name)
+            self._moves_log_renderer.render(canvas, self._moves_log_data)
+            self._game_over_renderer.render(canvas, self._game_over_data)
+            canvas.show_frame(self._window_name)
 
             if cv2.waitKey(FRAME_DELAY_MS) & 0xFF in QUIT_KEYS:
                 break

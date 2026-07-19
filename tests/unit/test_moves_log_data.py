@@ -1,3 +1,10 @@
+from engine.game_engine import (
+    ArrivalObserver,
+    GameOverObserver,
+    JumpStartedObserver,
+    MotionStartedObserver,
+    RestStartedObserver,
+)
 from model.piece import Piece
 from model.position import Position
 from realtime.real_time_arbiter import ArrivalEvent
@@ -53,13 +60,11 @@ def test_log_is_capped_at_max_lines():
     assert len(data.lines()) == 2
 
 
-def test_the_other_observer_hooks_are_no_ops():
+def test_the_log_declares_only_the_arrival_hook():
     data = MovesLogData()
-    piece = Piece(id=1, color="w", kind="R", cell=Position(0, 0))
 
-    data.on_motion_started(piece, Position(0, 0), Position(0, 1), duration_ms=1000)
-    data.on_jump_started(piece, Position(0, 0), duration_ms=1000)
-    data.on_rest_started(piece, duration_ms=5000, label="long_rest")
-    data.on_game_over()
-
-    assert data.lines() == []
+    assert isinstance(data, ArrivalObserver)
+    assert not isinstance(data, MotionStartedObserver)
+    assert not isinstance(data, JumpStartedObserver)
+    assert not isinstance(data, RestStartedObserver)
+    assert not isinstance(data, GameOverObserver)

@@ -61,10 +61,6 @@ class PieceAnimatorRegistry:
         duration_ms."""
         self._animator_for(piece).start_rest(duration_ms, label)
 
-    def on_game_over(self) -> None:
-        """GameObserver hook: no animation reaction to game-over today."""
-        return None
-
     def advance_time(self, dt_ms: int) -> None:
         """Advance every tracked piece's animation clock by dt_ms - the
         same dt_ms fed to GameEngine.wait() this frame. Not itself a

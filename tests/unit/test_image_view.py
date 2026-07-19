@@ -194,3 +194,18 @@ def test_overlay_rect_raises_if_not_loaded():
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_text_size_returns_positive_width_and_height():
+    width, height = Img().text_size("GAME OVER", font_size=3.0, thickness=6)
+
+    assert width > 0
+    assert height > 0
+
+
+def test_text_size_grows_with_a_bigger_font():
+    small_w, small_h = Img().text_size("GAME OVER", font_size=1.0)
+    big_w, big_h = Img().text_size("GAME OVER", font_size=3.0)
+
+    assert big_w > small_w
+    assert big_h > small_h

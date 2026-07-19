@@ -8,10 +8,11 @@ MAX_LOGGED_LINES = 10
 
 
 class MovesLogData:
-    """GameObserver that keeps a running text log of every arrival (a
+    """ArrivalObserver that keeps a running text log of every arrival (a
     move or a jump-defense), most recent first - MovesLogRenderer
     decides how to draw the lines it hands out, this class only decides
-    what they say and how many are kept."""
+    what they say and how many are kept. The log reacts to arrivals
+    only, so on_arrival is the single hook it declares."""
 
     def __init__(self, max_lines: int = MAX_LOGGED_LINES) -> None:
         self._max_lines = max_lines
@@ -22,8 +23,8 @@ class MovesLogData:
         return list(self._lines)
 
     def on_arrival(self, event: ArrivalEvent) -> None:
-        """GameObserver hook: log one line describing the arrival,
-        including what (if anything) it captured."""
+        """Log one line describing the arrival, including what (if
+        anything) it captured."""
         captured = f" x{event.captured_piece.kind}" if event.captured_piece is not None else ""
         source = f"({event.source.row},{event.source.col})"
         destination = f"({event.destination.row},{event.destination.col})"

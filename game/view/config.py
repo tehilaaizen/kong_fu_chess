@@ -43,3 +43,13 @@ HIGHLIGHT_ALPHA = 0.4
 # the cooldown elapses.
 REST_OVERLAY_COLOR = (0, 165, 255)  # amber
 REST_OVERLAY_ALPHA = 0.5
+
+# Game-over banner: a full-window dark wash with big centered text, drawn
+# on top of everything once a king is captured
+# (view/game_over/game_over_renderer.py).
+GAME_OVER_TEXT = "GAME OVER"
+GAME_OVER_OVERLAY_COLOR = (0, 0, 0)  # black wash
+GAME_OVER_OVERLAY_ALPHA = 0.6
+GAME_OVER_TEXT_COLOR = (255, 255, 255, 255)  # white
+GAME_OVER_FONT_SIZE = 3.0
+GAME_OVER_FONT_THICKNESS = 6

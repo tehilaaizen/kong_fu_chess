@@ -141,6 +141,10 @@ class RealTimeArbiter:
                 events.append(self._resolve_airborne_defense(motion))
                 continue
 
+            if self._is_blocked_by_friendly(motion):
+                self._resolve_friendly_block(motion)
+                continue
+
             captured_piece = self._board.piece_at(motion.destination)
             self._board.move_piece(motion.source, motion.destination)
 
@@ -179,6 +183,25 @@ class RealTimeArbiter:
         self._board.remove_piece(motion.source)
         motion.piece.state = CAPTURED
         return ArrivalEvent(jumper, motion.destination, motion.destination, motion.piece)
+
+    def _is_blocked_by_friendly(self, motion: Motion) -> bool:
+        """Whether motion's destination is now held by a piece of the same
+        color as the mover. RuleEngine already rejects friendly-occupied
+        destinations up front, so this can only happen in real time: the
+        blocker was sent to (or arrived at) that cell while this motion
+        was still travelling."""
+        occupant = self._board.piece_at(motion.destination)
+        return occupant is not None and occupant.color == motion.piece.color
+
+    def _resolve_friendly_block(self, motion: Motion) -> None:
+        """A move arrived at a cell a friendly piece now occupies: the
+        move is cancelled rather than capturing its own side. The piece
+        simply stays where it is - since occupancy changes only on
+        arrival, it never left its source cell logically - and rests as
+        any other completed motion does, which also tells the view to stop
+        sliding it and draw it back on that source cell. Nothing is
+        captured, so no ArrivalEvent is reported: the board is unchanged."""
+        self._start_rest(motion.piece, MOVE_REST_DURATION_MS, LONG_REST)
 
     def _clear_airborne(self, cell: Position) -> None:
         """Remove the jump record for cell (it has just been resolved by

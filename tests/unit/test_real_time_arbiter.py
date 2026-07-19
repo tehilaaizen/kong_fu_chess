@@ -252,6 +252,71 @@ def test_an_attacker_arriving_at_an_airborne_cell_is_destroyed_and_the_jumper_su
     assert events[0].destination == Position(1, 2)
 
 
+def test_a_move_arriving_at_a_friendly_occupied_cell_is_cancelled():
+    # Both white rooks are sent to (2,2) while it is still empty, so
+    # RuleEngine's friendly_destination guard can't catch it up front:
+    # the blocker only lands there while the second rook is in flight.
+    board = Board(width=5, height=5)
+    blocker = Piece(id=1, color="w", kind="R", cell=Position(2, 0))
+    board.add_piece(blocker)
+    latecomer = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(latecomer)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_motion(blocker, Position(2, 0), Position(2, 2))  # 2 cells: 2000ms
+    arbiter.start_motion(latecomer, Position(0, 2), Position(2, 2))  # 2 cells: 2000ms
+    events = arbiter.advance_time(2000)
+
+    # Blocker got there first (started first), latecomer bounced back.
+    assert board.piece_at(Position(2, 2)) is blocker
+    assert board.piece_at(Position(0, 2)) is latecomer
+    assert blocker.state != CAPTURED
+    assert latecomer.state != CAPTURED
+    # Only the blocker's real arrival is reported - the cancelled move
+    # changed nothing, so it captured nothing and scores nothing.
+    assert len(events) == 1
+    assert events[0].piece is blocker
+    assert events[0].captured_piece is None
+
+
+def test_a_piece_whose_move_was_cancelled_rests_and_can_move_again_after():
+    board = Board(width=5, height=5)
+    blocker = Piece(id=1, color="w", kind="R", cell=Position(2, 2))
+    board.add_piece(blocker)
+    latecomer = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(latecomer)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_motion(latecomer, Position(0, 2), Position(2, 2))
+    arbiter.advance_time(2000)
+
+    # The rest is what tells the view to stop sliding the sprite and draw
+    # it back on its source cell.
+    assert arbiter.is_resting(latecomer) is True
+    rest_starts = arbiter.take_rest_starts()
+    assert len(rest_starts) == 1
+    assert rest_starts[0].piece is latecomer
+
+    arbiter.advance_time(5000)
+    assert arbiter.is_resting(latecomer) is False
+
+
+def test_a_move_arriving_at_an_enemy_occupied_cell_still_captures():
+    board = Board(width=5, height=5)
+    enemy = Piece(id=1, color="b", kind="R", cell=Position(2, 2))
+    board.add_piece(enemy)
+    attacker = Piece(id=2, color="w", kind="R", cell=Position(0, 2))
+    board.add_piece(attacker)
+    arbiter = RealTimeArbiter(board)
+
+    arbiter.start_motion(attacker, Position(0, 2), Position(2, 2))
+    events = arbiter.advance_time(2000)
+
+    assert board.piece_at(Position(2, 2)) is attacker
+    assert enemy.state == CAPTURED
+    assert events[0].captured_piece is enemy
+
+
 def test_after_a_jump_expires_an_arriving_attacker_captures_normally():
     board = Board(width=5, height=5)
     former_jumper = Piece(id=1, color="b", kind="K", cell=Position(2, 2))

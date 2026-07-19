@@ -129,6 +129,15 @@ class Img:
                     cv2.FONT_HERSHEY_SIMPLEX, font_size,
                     color, thickness, cv2.LINE_AA)
 
+    def text_size(self, txt: str, font_size: float, thickness: int = 1) -> tuple[int, int]:
+        """The (width, height) in pixels that txt would occupy if drawn
+        with put_text at font_size/thickness - lets a caller center text
+        without needing to know cv2 is underneath."""
+        (width, height), _baseline = cv2.getTextSize(
+            txt, cv2.FONT_HERSHEY_SIMPLEX, font_size, thickness
+        )
+        return width, height
+
     def show(self) -> None:
         """Open a blocking window showing self.img until any key is pressed."""
         if self.img is None:
