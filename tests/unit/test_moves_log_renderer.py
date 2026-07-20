@@ -39,11 +39,11 @@ class _RecordingCanvas:
 
 
 class _FakeLog:
-    def lines(self) -> list[str]:
-        return ["m1", "m2"]
+    def lines_for(self, color: str) -> list[str]:
+        return {"w": ["w1", "w2"], "b": ["b1"]}[color]
 
 
-def test_log_lines_shift_with_the_letterbox_offset_and_stack_by_line_height():
+def test_each_color_is_drawn_in_its_own_column_stacked_by_line_height():
     geometry = BoardGeometry()
     geometry.fit_to_window(1200, 1600)  # tall window -> vertical letterbox
     assert geometry.board_origin_y > 0
@@ -52,6 +52,7 @@ def test_log_lines_shift_with_the_letterbox_offset_and_stack_by_line_height():
     MovesLogRenderer(geometry).render(canvas, _FakeLog())
 
     assert canvas.calls == [
-        ("m1", geometry.left_column_x + 10, geometry.board_origin_y + 100),
-        ("m2", geometry.left_column_x + 10, geometry.board_origin_y + 100 + 20),
+        ("w1", geometry.left_column_x + 10, geometry.board_origin_y + 100),
+        ("w2", geometry.left_column_x + 10, geometry.board_origin_y + 100 + 20),
+        ("b1", geometry.right_column_x + 10, geometry.board_origin_y + 100),
     ]

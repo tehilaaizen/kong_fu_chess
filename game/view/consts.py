@@ -11,6 +11,9 @@ ANIMATION_STATES = ("idle", "move", "jump", "short_rest", "long_rest")
 ANIMATION_FRAME_COUNT = 5
 
 BOARD_IMAGE_PATH = str(PROJECT_ROOT / "assets" / "bord.png")
+# Full-window backdrop drawn behind the board and both HUD columns
+# (including the letterbox margins) - replaces a plain black fill.
+BACKGROUND_IMAGE_PATH = str(PROJECT_ROOT / "assets" / "background.png")
 PIECES_ASSETS_DIR = PROJECT_ROOT / "assets" / "pieces"
 
 # Pixel offset from the window's top-left corner to the board's own

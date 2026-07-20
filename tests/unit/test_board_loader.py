@@ -46,3 +46,24 @@ def test_reload_re_reads_the_board_at_geometrys_current_size():
     loader.reload()
 
     assert loader._clean_board.img.shape[:2] == (geometry.height_px, geometry.width_px)
+
+
+def test_fresh_canvas_uses_the_backdrop_image_outside_the_board():
+    geometry = BoardGeometry()  # left HUD column is 200px wide
+    loader = BoardLoader(geometry)
+
+    canvas = loader.fresh_canvas()
+
+    # a pixel well inside the left HUD column is outside the board, so it
+    # must come straight from the backdrop rather than a black fill
+    assert (canvas.img[10, 10, :3] == loader._background.img[10, 10, :3]).all()
+
+
+def test_reload_re_reads_the_backdrop_at_the_new_window_size():
+    geometry = BoardGeometry()
+    loader = BoardLoader(geometry)
+
+    geometry.fit_to_window(1600, 1000)
+    loader.reload()
+
+    assert loader._background.img.shape[:2] == (geometry.window_height_px, geometry.window_width_px)
