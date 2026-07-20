@@ -20,13 +20,18 @@ class ScoreRenderer:
     def render(self, canvas: Img, score_data: ScoreData) -> Img:
         """Draw both colors' scores onto canvas, in place, and return it
         for chaining."""
+        y = self._geometry.board_origin_y + SCORE_LINE_Y_PX
         canvas.put_text(
-            f"Score: {score_data.score_for('w')}", TEXT_MARGIN_PX, SCORE_LINE_Y_PX, FONT_SIZE, WHITE_TEXT_COLOR
+            f"Score: {score_data.score_for('w')}",
+            self._geometry.left_column_x + TEXT_MARGIN_PX,
+            y,
+            FONT_SIZE,
+            WHITE_TEXT_COLOR,
         )
         canvas.put_text(
             f"Score: {score_data.score_for('b')}",
             self._geometry.right_column_x + TEXT_MARGIN_PX,
-            SCORE_LINE_Y_PX,
+            y,
             FONT_SIZE,
             WHITE_TEXT_COLOR,
         )

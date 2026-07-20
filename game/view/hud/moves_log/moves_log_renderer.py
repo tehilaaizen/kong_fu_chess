@@ -21,8 +21,9 @@ class MovesLogRenderer:
     def render(self, canvas: Img, moves_log_data: MovesLogData) -> Img:
         """Draw every logged line onto canvas, in place, and return it
         for chaining."""
+        x = self._geometry.left_column_x + TEXT_MARGIN_PX
         for index, line in enumerate(moves_log_data.lines()):
-            y = FIRST_LINE_Y_PX + index * LINE_HEIGHT_PX
-            canvas.put_text(line, TEXT_MARGIN_PX, y, FONT_SIZE, WHITE_TEXT_COLOR)
+            y = self._geometry.board_origin_y + FIRST_LINE_Y_PX + index * LINE_HEIGHT_PX
+            canvas.put_text(line, x, y, FONT_SIZE, WHITE_TEXT_COLOR)
 
         return canvas

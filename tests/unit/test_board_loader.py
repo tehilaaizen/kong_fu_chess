@@ -36,3 +36,13 @@ def test_fresh_canvas_returns_an_independent_copy_each_time():
     second = loader.fresh_canvas()
 
     assert first.img is not second.img
+
+
+def test_reload_re_reads_the_board_at_geometrys_current_size():
+    geometry = BoardGeometry(left_column_width_px=0, right_column_width_px=0)
+    loader = BoardLoader(geometry)
+
+    geometry.cell_size_px = 40
+    loader.reload()
+
+    assert loader._clean_board.img.shape[:2] == (geometry.height_px, geometry.width_px)

@@ -17,6 +17,12 @@ class PieceLoader:
         self._assets_root = assets_root
         self._cell_size = cell_size
 
+    def set_cell_size(self, cell_size: int) -> None:
+        """Change the pixel size sprites are loaded at - takes effect on
+        the next load_sprite call, used when a window resize rescales the
+        board (AnimationLibrary.reload drives this before re-reading)."""
+        self._cell_size = cell_size
+
     def state_dir(self, kind: str, color: str, state: str) -> pathlib.Path:
         """The states/<state> directory for one piece kind/color
         combination (e.g. kind="P", color="w", state="idle")."""

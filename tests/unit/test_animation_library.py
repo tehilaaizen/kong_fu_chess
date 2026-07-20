@@ -68,3 +68,24 @@ def test_get_clip_does_not_share_across_different_kinds_or_colors():
     rook = library.get_clip("R", "b", "idle")
 
     assert pawn is not rook
+
+
+def test_reload_reloads_every_sprite_at_the_new_cell_size():
+    piece_loader = PieceLoader()
+    library = AnimationLibrary(piece_loader, AnimationConfigLoader(piece_loader), kinds=("P",), colors=("w",))
+    assert library.get_clip("P", "w", "idle").frames[0].img.shape == (100, 100, 4)
+
+    library.reload(40)
+
+    assert library.get_clip("P", "w", "idle").frames[0].img.shape == (40, 40, 4)
+
+
+def test_reload_is_visible_through_a_previously_bound_get_clip_reference():
+    piece_loader = PieceLoader()
+    library = AnimationLibrary(piece_loader, AnimationConfigLoader(piece_loader), kinds=("P",), colors=("w",))
+    get_clip = library.get_clip  # what every PieceAnimator holds onto
+    assert get_clip("P", "w", "idle").frames[0].img.shape == (100, 100, 4)
+
+    library.reload(40)
+
+    assert get_clip("P", "w", "idle").frames[0].img.shape == (40, 40, 4)

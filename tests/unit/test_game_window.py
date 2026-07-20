@@ -1,6 +1,6 @@
 import cv2
 
-from game_window import GameWindow
+from game_window import RESIZE_DEBOUNCE_FRAMES, GameWindow
 from input.commands import ClickCommand, JumpCommand
 
 
@@ -34,7 +34,20 @@ class _OutsideBoardExtractor:
         return None
 
 
-def _window(extractor=None, command_sender=None):
+class _FakeResizer:
+    """Reports a fixed initial window size and records apply() calls."""
+
+    def __init__(self) -> None:
+        self.applied: list[tuple[int, int]] = []
+
+    def current_window_size(self) -> tuple[int, int]:
+        return (1200, 800)
+
+    def apply(self, width: int, height: int) -> None:
+        self.applied.append((width, height))
+
+
+def _window(extractor=None, command_sender=None, resizer=None):
     return GameWindow(
         board_renderer=None,
         piece_renderer=None,
@@ -53,6 +66,7 @@ def _window(extractor=None, command_sender=None):
         player_panel_renderer=None,
         game_over_renderer=None,
         game_over_data=None,
+        resizer=resizer or _FakeResizer(),
     )
 
 
@@ -91,3 +105,40 @@ def test_a_click_outside_the_board_is_not_sent():
     window._on_mouse_event(cv2.EVENT_LBUTTONDOWN, 9999, 9999, 0, None)
 
     assert sender.sent == []
+
+
+def test_a_resize_is_applied_only_after_the_new_size_holds_for_the_debounce_window():
+    resizer = _FakeResizer()
+    window = _window(resizer=resizer)
+
+    for _ in range(RESIZE_DEBOUNCE_FRAMES - 1):
+        window._note_window_size(1600, 1000)
+    assert resizer.applied == []
+
+    window._note_window_size(1600, 1000)
+
+    assert resizer.applied == [(1600, 1000)]
+
+
+def test_a_changing_size_restarts_the_debounce_count():
+    resizer = _FakeResizer()
+    window = _window(resizer=resizer)
+
+    for _ in range(RESIZE_DEBOUNCE_FRAMES - 1):
+        window._note_window_size(1600, 1000)
+    window._note_window_size(1700, 1000)  # size changed before it settled
+    for _ in range(RESIZE_DEBOUNCE_FRAMES - 1):
+        window._note_window_size(1700, 1000)
+
+    assert resizer.applied == [(1700, 1000)]
+
+
+def test_an_unchanged_or_nonpositive_size_never_triggers_a_resize():
+    resizer = _FakeResizer()
+    window = _window(resizer=resizer)
+
+    for _ in range(RESIZE_DEBOUNCE_FRAMES * 2):
+        window._note_window_size(1200, 800)  # equals the committed startup size
+        window._note_window_size(0, 0)  # minimized / not yet realized
+
+    assert resizer.applied == []

@@ -25,3 +25,12 @@ def test_load_sprite_reads_a_real_resized_rgba_frame():
 
     assert sprite.img is not None
     assert sprite.img.shape == (100, 100, 4)
+
+
+def test_set_cell_size_changes_the_size_sprites_load_at():
+    loader = PieceLoader()
+    loader.set_cell_size(40)
+
+    sprite = loader.load_sprite("P", "w", "idle", 1)
+
+    assert sprite.img.shape == (40, 40, 4)

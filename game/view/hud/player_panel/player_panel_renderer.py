@@ -23,11 +23,18 @@ class PlayerPanelRenderer:
     def render(self, canvas: Img) -> Img:
         """Draw both colors' player names onto canvas, in place, and
         return it for chaining."""
-        canvas.put_text(self._name_by_color["w"], TEXT_MARGIN_PX, NAME_LINE_Y_PX, FONT_SIZE, WHITE_TEXT_COLOR)
+        y = self._geometry.board_origin_y + NAME_LINE_Y_PX
+        canvas.put_text(
+            self._name_by_color["w"],
+            self._geometry.left_column_x + TEXT_MARGIN_PX,
+            y,
+            FONT_SIZE,
+            WHITE_TEXT_COLOR,
+        )
         canvas.put_text(
             self._name_by_color["b"],
             self._geometry.right_column_x + TEXT_MARGIN_PX,
-            NAME_LINE_Y_PX,
+            y,
             FONT_SIZE,
             WHITE_TEXT_COLOR,
         )

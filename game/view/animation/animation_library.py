@@ -51,14 +51,37 @@ class AnimationLibrary:
         states: tuple[str, ...] = ANIMATION_STATES,
         frame_count: int = ANIMATION_FRAME_COUNT,
     ) -> None:
+        self._piece_loader = piece_loader
+        self._config_loader = config_loader
+        self._kinds = kinds
+        self._colors = colors
+        self._states = states
+        self._frame_count = frame_count
         self._clips: dict[tuple[str, str, str], AnimationClip] = {}
+        self._load_all()
 
-        for kind in kinds:
-            for color in colors:
-                state_configs = config_loader.load(kind, color)
-                for state in states:
-                    frames = [piece_loader.load_sprite(kind, color, state, i) for i in range(1, frame_count + 1)]
-                    self._clips[(kind, color, state)] = AnimationClip(frames=frames, state_config=state_configs[state])
+    def _load_all(self) -> None:
+        """(Re)load every (kind, color, state) clip from disk at the piece
+        loader's current cell size, replacing the clip cache in place -
+        so anyone holding a reference to get_clip (e.g. every
+        PieceAnimator) transparently sees the new frames."""
+        clips: dict[tuple[str, str, str], AnimationClip] = {}
+        for kind in self._kinds:
+            for color in self._colors:
+                state_configs = self._config_loader.load(kind, color)
+                for state in self._states:
+                    frames = [
+                        self._piece_loader.load_sprite(kind, color, state, i)
+                        for i in range(1, self._frame_count + 1)
+                    ]
+                    clips[(kind, color, state)] = AnimationClip(frames=frames, state_config=state_configs[state])
+        self._clips = clips
+
+    def reload(self, cell_size: int) -> None:
+        """Re-read every sprite at cell_size after a window resize -
+        retunes the piece loader then rebuilds the whole clip cache."""
+        self._piece_loader.set_cell_size(cell_size)
+        self._load_all()
 
     def get_clip(self, kind: str, color: str, state: str) -> AnimationClip:
         """The pre-loaded AnimationClip for kind/color/state."""

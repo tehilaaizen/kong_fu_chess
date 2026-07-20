@@ -21,10 +21,15 @@ from view.hud.player_panel.player_panel_renderer import PlayerPanelRenderer
 from view.hud.score.score_data import ScoreData
 from view.hud.score.score_renderer import ScoreRenderer
 from view.pieces.piece_renderer import PieceRenderer
+from window_resizer import WindowResizer
 
 DEFAULT_WINDOW_NAME = "Kong Fu Chess"
 QUIT_KEYS = (ord("q"), 27)  # 27 == Esc
 FRAME_DELAY_MS = 16  # ~60fps, also pumps the window's event queue
+# A resize is only applied once the window has held a new size for this
+# many consecutive frames, so dragging the edge doesn't re-read every
+# sprite off disk on every intermediate size (that reload is expensive).
+RESIZE_DEBOUNCE_FRAMES = 8
 
 
 class WaitsAndSnapshots(Protocol):
@@ -77,6 +82,7 @@ class GameWindow:
         player_panel_renderer: PlayerPanelRenderer,
         game_over_renderer: GameOverRenderer,
         game_over_data: GameOverData,
+        resizer: WindowResizer,
         window_name: str = DEFAULT_WINDOW_NAME,
     ) -> None:
         self._board_renderer = board_renderer
@@ -96,7 +102,11 @@ class GameWindow:
         self._player_panel_renderer = player_panel_renderer
         self._game_over_renderer = game_over_renderer
         self._game_over_data = game_over_data
+        self._resizer = resizer
         self._window_name = window_name
+        self._committed_width, self._committed_height = resizer.current_window_size()
+        self._pending_size: tuple[int, int] | None = None
+        self._pending_frames = 0
 
     def _on_mouse_event(self, event: int, x: int, y: int, flags: int, userdata: object) -> None:
         """Classify a left- or right-button-down event into a Command via
@@ -112,6 +122,37 @@ class GameWindow:
         if command is not None:
             self._command_sender.send(command)
 
+    def _poll_resize(self) -> None:
+        """Read the live window size from cv2 and feed it to the debounce
+        logic. Not unit-tested - the cv2 read only works against a real
+        window, same category as run(); the debounce decision it delegates
+        to (_note_window_size) is tested on its own."""
+        _, _, width, height = cv2.getWindowImageRect(self._window_name)
+        self._note_window_size(width, height)
+
+    def _note_window_size(self, width: int, height: int) -> None:
+        """Debounce one observed window size: ignore a non-positive or
+        unchanged size, otherwise count consecutive frames at the same new
+        size and apply the resize once it has held for
+        RESIZE_DEBOUNCE_FRAMES - so dragging the edge doesn't re-read every
+        sprite off disk on each intermediate size."""
+        if width <= 0 or height <= 0 or (width, height) == (self._committed_width, self._committed_height):
+            self._pending_size = None
+            self._pending_frames = 0
+            return
+
+        if (width, height) == self._pending_size:
+            self._pending_frames += 1
+        else:
+            self._pending_size = (width, height)
+            self._pending_frames = 1
+
+        if self._pending_frames >= RESIZE_DEBOUNCE_FRAMES:
+            self._resizer.apply(width, height)
+            self._committed_width, self._committed_height = width, height
+            self._pending_size = None
+            self._pending_frames = 0
+
     def run(self) -> None:
         """Open the window and loop until the user quits: advance
         simulated time by however much real time passed - feeding that
@@ -126,11 +167,14 @@ class GameWindow:
 
         Not unit-tested (a real, blocking GUI loop) - same category as
         Img.show()/show_frame()."""
-        cv2.namedWindow(self._window_name)
+        cv2.namedWindow(self._window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self._window_name, self._committed_width, self._committed_height)
         cv2.setMouseCallback(self._window_name, self._on_mouse_event)
         self._registry.seed(self._game_engine.snapshot())
 
         while True:
+            self._poll_resize()
+
             elapsed_ms = self._clock.tick_ms()
             self._registry.advance_time(elapsed_ms)
             self._game_engine.wait(elapsed_ms)

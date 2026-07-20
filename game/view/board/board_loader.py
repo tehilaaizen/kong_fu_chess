@@ -24,6 +24,12 @@ class BoardLoader:
         board's own size (not the full window)."""
         return Img().read(self._image_path, size=(self._geometry.width_px, self._geometry.height_px))
 
+    def reload(self) -> None:
+        """Re-read the board image from disk at geometry's current board
+        size - called after a window resize changed cell_size_px, so the
+        cached background matches the new board dimensions."""
+        self._clean_board = self._read_from_disk()
+
     def fresh_canvas(self) -> Img:
         """A fresh full-window canvas: blank HUD columns either side of
         an in-memory copy of the loaded board background, positioned at

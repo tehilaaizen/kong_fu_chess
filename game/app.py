@@ -30,6 +30,7 @@ from view.hud.score.score_data import ScoreData
 from view.hud.score.score_renderer import ScoreRenderer
 from view.pieces.piece_loader import PieceLoader
 from view.pieces.piece_renderer import PieceRenderer
+from window_resizer import WindowResizer
 
 # Standard chess starting position, in this project's own board notation
 # (text_io/board_parser.py).
@@ -54,13 +55,17 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
     rule_engine = RuleEngine()
     real_time_arbiter = RealTimeArbiter(board)
     game_engine = GameEngine(board, rule_engine, real_time_arbiter)
-    controller = Controller(board, BoardMapper(board), game_engine)
+    board_mapper = BoardMapper(board)
+    controller = Controller(board, board_mapper, game_engine)
 
     geometry = BoardGeometry()
     piece_loader = PieceLoader()
     animation_library = AnimationLibrary(piece_loader, AnimationConfigLoader(piece_loader))
     registry = PieceAnimatorRegistry(animation_library)
     game_engine.add_observer(registry)
+
+    board_loader = BoardLoader(geometry)
+    resizer = WindowResizer(geometry, board_mapper, board_loader, animation_library)
 
     score_data = ScoreData()
     game_engine.add_observer(score_data)
@@ -70,7 +75,7 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
     game_engine.add_observer(game_over_data)
 
     window = GameWindow(
-        board_renderer=BoardRenderer(BoardLoader(geometry)),
+        board_renderer=BoardRenderer(board_loader),
         piece_renderer=PieceRenderer(geometry),
         highlight_renderer=HighlightRenderer(geometry),
         rest_overlay_renderer=RestOverlayRenderer(geometry),
@@ -87,6 +92,7 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
         player_panel_renderer=PlayerPanelRenderer(geometry, player_name_by_color),
         game_over_renderer=GameOverRenderer(geometry),
         game_over_data=game_over_data,
+        resizer=resizer,
     )
     window.run()
 
