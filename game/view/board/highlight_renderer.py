@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from model.position import Position
-from view import config
+from view import consts
 from view.geometry import BoardGeometry
 from view.image_view import Img
 
@@ -23,6 +23,6 @@ class HighlightRenderer:
             canvas.overlay_rect(
                 x, y,
                 self._geometry.cell_size_px, self._geometry.cell_size_px,
-                config.HIGHLIGHT_COLOR, config.HIGHLIGHT_ALPHA,
+                consts.HIGHLIGHT_COLOR, consts.HIGHLIGHT_ALPHA,
             )
         return canvas

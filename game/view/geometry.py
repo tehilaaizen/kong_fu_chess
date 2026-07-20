@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from input.board_mapper import CELL_SIZE
 from model.position import Position
-from view import config
+from view import consts
 
 
 @dataclass
@@ -19,12 +19,12 @@ class BoardGeometry:
     1), the board itself, and a right HUD column (player 2) - no
     top/bottom HUD elements, so there is only one y-axis offset."""
 
-    width_cells: int = config.BOARD_WIDTH
-    height_cells: int = config.BOARD_HEIGHT
+    width_cells: int = consts.BOARD_WIDTH
+    height_cells: int = consts.BOARD_HEIGHT
     cell_size_px: int = CELL_SIZE
-    left_column_width_px: int = config.HUD_COLUMN_WIDTH_PX
-    right_column_width_px: int = config.HUD_COLUMN_WIDTH_PX
-    board_origin_y: int = config.BOARD_PADDING_HEIGHT_PX
+    left_column_width_px: int = consts.HUD_COLUMN_WIDTH_PX
+    right_column_width_px: int = consts.HUD_COLUMN_WIDTH_PX
+    board_origin_y: int = consts.BOARD_PADDING_HEIGHT_PX
 
     @property
     def board_origin_x(self) -> int:

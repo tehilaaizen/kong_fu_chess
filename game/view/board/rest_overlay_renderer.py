@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from model.position import Position
-from view import config
+from view import consts
 from view.geometry import BoardGeometry
 from view.image_view import Img
 
@@ -29,6 +29,6 @@ class RestOverlayRenderer:
             canvas.overlay_rect(
                 x, y + (cell_size - covered),
                 cell_size, covered,
-                config.REST_OVERLAY_COLOR, config.REST_OVERLAY_ALPHA,
+                consts.REST_OVERLAY_COLOR, consts.REST_OVERLAY_ALPHA,
             )
         return canvas

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pieces import PIECE_TYPES, VALID_COLORS
 from view.animation.animation_config_loader import AnimationConfigLoader
 from view.animation.state_config import StateConfig
-from view.config import ANIMATION_FRAME_COUNT, ANIMATION_STATES
+from view.consts import ANIMATION_FRAME_COUNT, ANIMATION_STATES
 from view.image_view import Img
 from view.pieces.piece_loader import PieceLoader
 

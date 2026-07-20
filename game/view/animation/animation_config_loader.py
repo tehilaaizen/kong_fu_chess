@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from view.animation.state_config import GraphicsConfig, PhysicsConfig, StateConfig
-from view.config import ANIMATION_STATES
+from view.consts import ANIMATION_STATES
 from view.pieces.piece_loader import PieceLoader
 
 

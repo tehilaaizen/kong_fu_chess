@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from realtime.real_time_arbiter import ArrivalEvent
-from view.config import POINT_VALUE_BY_KIND
+from view.consts import POINT_VALUE_BY_KIND
 
 
 class ScoreData:

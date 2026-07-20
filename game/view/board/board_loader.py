@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from view import config
+from view import consts
 from view.geometry import BoardGeometry
 from view.image_view import Img
 
@@ -14,7 +14,7 @@ class BoardLoader:
     plus both HUD side columns), with the board image drawn onto it at
     geometry's origin offset. Reads from disk only once, not every frame."""
 
-    def __init__(self, geometry: BoardGeometry, image_path: str = config.BOARD_IMAGE_PATH) -> None:
+    def __init__(self, geometry: BoardGeometry, image_path: str = consts.BOARD_IMAGE_PATH) -> None:
         self._geometry = geometry
         self._image_path = image_path
         self._clean_board = self._read_from_disk()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from view.config import DEFAULT_PLAYER_NAME_BY_COLOR
+from view.consts import DEFAULT_PLAYER_NAME_BY_COLOR
 from view.geometry import BoardGeometry
 from view.image_view import Img
 

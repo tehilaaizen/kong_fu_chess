@@ -3,7 +3,7 @@ from __future__ import annotations
 import pathlib
 
 from input.board_mapper import CELL_SIZE
-from view import config
+from view import consts
 from view.image_view import Img
 
 
@@ -13,7 +13,7 @@ class PieceLoader:
     (e.g. "PW"), the opposite order from the model's own Color+Kind
     convention (piece.color, piece.kind)."""
 
-    def __init__(self, assets_root: pathlib.Path = config.PIECES_ASSETS_DIR, cell_size: int = CELL_SIZE) -> None:
+    def __init__(self, assets_root: pathlib.Path = consts.PIECES_ASSETS_DIR, cell_size: int = CELL_SIZE) -> None:
         self._assets_root = assets_root
         self._cell_size = cell_size
 

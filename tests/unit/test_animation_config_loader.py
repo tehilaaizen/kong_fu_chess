@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from view.animation.animation_config_loader import AnimationConfigLoader
-from view.config import ANIMATION_STATES
+from view.consts import ANIMATION_STATES
 from view.pieces.piece_loader import PieceLoader
 
 

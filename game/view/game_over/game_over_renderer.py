@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from view import config
+from view import consts
 from view.game_over.game_over_data import GameOverData
 from view.geometry import BoardGeometry
 from view.image_view import Img
@@ -26,16 +26,16 @@ class GameOverRenderer:
         window_height = self._geometry.window_height_px
         canvas.overlay_rect(
             0, 0, window_width, window_height,
-            config.GAME_OVER_OVERLAY_COLOR, config.GAME_OVER_OVERLAY_ALPHA,
+            consts.GAME_OVER_OVERLAY_COLOR, consts.GAME_OVER_OVERLAY_ALPHA,
         )
 
         text_width, text_height = canvas.text_size(
-            config.GAME_OVER_TEXT, config.GAME_OVER_FONT_SIZE, config.GAME_OVER_FONT_THICKNESS
+            consts.GAME_OVER_TEXT, consts.GAME_OVER_FONT_SIZE, consts.GAME_OVER_FONT_THICKNESS
         )
         x = (window_width - text_width) // 2
         y = (window_height + text_height) // 2
         canvas.put_text(
-            config.GAME_OVER_TEXT, x, y,
-            config.GAME_OVER_FONT_SIZE, config.GAME_OVER_TEXT_COLOR, config.GAME_OVER_FONT_THICKNESS,
+            consts.GAME_OVER_TEXT, x, y,
+            consts.GAME_OVER_FONT_SIZE, consts.GAME_OVER_TEXT_COLOR, consts.GAME_OVER_FONT_THICKNESS,
         )
         return canvas
