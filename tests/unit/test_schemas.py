@@ -38,11 +38,11 @@ def test_parse_inbound_rejects_malformed_frames(raw):
         schemas.parse_inbound(raw)
 
 
-def test_move_accepted_carries_sequence_and_correlation_id():
-    message = schemas.move_accepted(sequence=7, correlation_id="m1")
+def test_move_accepted_is_an_ack_correlated_to_the_request():
+    message = schemas.move_accepted(correlation_id="m1")
 
     assert message["type"] == "move_accepted"
-    assert message["payload"] == {"sequence": 7}
+    assert message["payload"] == {}
     assert message["correlation_id"] == "m1"
 
 

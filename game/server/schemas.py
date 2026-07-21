@@ -66,9 +66,11 @@ def state_snapshot(board: list[list[str]], sequence: int, game_over: bool) -> di
     return _envelope("state_snapshot", {"board": board, "sequence": sequence, "game_over": game_over})
 
 
-def move_accepted(sequence: int, correlation_id: str | None) -> dict:
-    """Reply to an accepted make_move, correlated to the request."""
-    return _envelope("move_accepted", {"sequence": sequence}, correlation_id)
+def move_accepted(correlation_id: str | None) -> dict:
+    """Ack for an accepted make_move, correlated to the request. The
+    resulting board change is broadcast separately as a state_snapshot
+    once the motion resolves, carrying its own sequence."""
+    return _envelope("move_accepted", {}, correlation_id)
 
 
 def move_rejected(reason: str, correlation_id: str | None) -> dict:
