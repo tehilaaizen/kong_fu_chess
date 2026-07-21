@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from typing import Protocol
-
 import cv2
 
-from engine.game_snapshot import GameSnapshot
-from input.commands import CommandSender
+from client.game_client import GameClient
 from input.mouse_command_extractor import MouseCommandExtractor
 from model.position import Position
 from view.animation.piece_animator_registry import PieceAnimatorRegistry
@@ -32,36 +29,15 @@ FRAME_DELAY_MS = 16  # ~60fps, also pumps the window's event queue
 RESIZE_DEBOUNCE_FRAMES = 8
 
 
-class WaitsAndSnapshots(Protocol):
-    """The only capabilities GameWindow needs from a game engine - lets
-    tests inject a lightweight fake instead of the real GameEngine."""
-
-    def wait(self, ms: int) -> None:
-        ...
-
-    def snapshot(self) -> GameSnapshot:
-        ...
-
-    def legal_destinations(self, source: Position) -> set[Position]:
-        ...
-
-
-class SelectionSource(Protocol):
-    """Read-only access to the currently selected cell (Controller
-    satisfies this via its public selected_cell attribute) - lets
-    GameWindow highlight that piece's legal destinations without
-    depending on the concrete Controller class."""
-
-    selected_cell: Position | None
-
-
 class GameWindow:
     """Owns the live interactive window: opens it, classifies mouse
-    clicks into Commands and forwards them through CommandSender, and
-    redraws every frame by pulling the current GameSnapshot straight
-    from GameEngine (see kung_fu_chess_design_guide.md §12 - this class,
-    not view/, is where Controller/GameEngine dependencies belong, since
-    view/ must stay pure)."""
+    clicks into Commands and forwards them through a GameClient, and
+    redraws every frame by pulling the current GameSnapshot from that
+    client. It depends only on the GameClient interface, never on a
+    concrete GameEngine, so the same window drives an offline
+    LocalGameAdapter or an online NetworkGameAdapter unchanged (see
+    kung_fu_chess_design_guide.md §12 - view/ stays pure; this top-level
+    class is where the client dependency belongs)."""
 
     def __init__(
         self,
@@ -70,9 +46,7 @@ class GameWindow:
         highlight_renderer: HighlightRenderer,
         rest_overlay_renderer: RestOverlayRenderer,
         extractor: MouseCommandExtractor,
-        command_sender: CommandSender,
-        game_engine: WaitsAndSnapshots,
-        selection_source: SelectionSource,
+        client: GameClient,
         clock: FrameClock,
         registry: PieceAnimatorRegistry,
         score_renderer: ScoreRenderer,
@@ -90,9 +64,7 @@ class GameWindow:
         self._highlight_renderer = highlight_renderer
         self._rest_overlay_renderer = rest_overlay_renderer
         self._extractor = extractor
-        self._command_sender = command_sender
-        self._game_engine = game_engine
-        self._selection_source = selection_source
+        self._client = client
         self._clock = clock
         self._registry = registry
         self._score_renderer = score_renderer
@@ -120,7 +92,7 @@ class GameWindow:
             return
 
         if command is not None:
-            self._command_sender.send(command)
+            self._client.send(command)
 
     def _poll_resize(self) -> None:
         """Read the live window size from cv2 and feed it to the debounce
@@ -170,16 +142,16 @@ class GameWindow:
         cv2.namedWindow(self._window_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self._window_name, self._committed_width, self._committed_height)
         cv2.setMouseCallback(self._window_name, self._on_mouse_event)
-        self._registry.seed(self._game_engine.snapshot())
+        self._registry.seed(self._client.snapshot())
 
         while True:
             self._poll_resize()
 
             elapsed_ms = self._clock.tick_ms()
             self._registry.advance_time(elapsed_ms)
-            self._game_engine.wait(elapsed_ms)
+            self._client.advance(elapsed_ms)
 
-            snapshot = self._game_engine.snapshot()
+            snapshot = self._client.snapshot()
             frames = self._registry.current_frames(snapshot)
             offsets = self._registry.current_offsets(snapshot)
             rest_overlays = self._registry.resting_overlays(snapshot)
@@ -202,7 +174,7 @@ class GameWindow:
     def _highlighted_cells(self) -> set[Position]:
         """The cells to highlight this frame: the legal destinations of
         the currently selected piece, or none when nothing is selected."""
-        selected = self._selection_source.selected_cell
+        selected = self._client.selected_cell
         if selected is None:
             return set()
-        return self._game_engine.legal_destinations(selected)
+        return self._client.legal_destinations(selected)

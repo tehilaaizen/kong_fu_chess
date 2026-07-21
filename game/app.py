@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from client.local_game_adapter import LocalGameAdapter
 from engine.game_engine import GameEngine
 from game_window import GameWindow
 from input.board_mapper import BoardMapper
-from input.commands import LocalCommandSender
 from input.controller import Controller
 from input.mouse_command_extractor import MouseCommandExtractor
 from realtime.real_time_arbiter import RealTimeArbiter
@@ -57,22 +57,23 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
     game_engine = GameEngine(board, rule_engine, real_time_arbiter)
     board_mapper = BoardMapper(board)
     controller = Controller(board, board_mapper, game_engine)
+    client = LocalGameAdapter(game_engine, controller)
 
     geometry = BoardGeometry()
     piece_loader = PieceLoader()
     animation_library = AnimationLibrary(piece_loader, AnimationConfigLoader(piece_loader))
     registry = PieceAnimatorRegistry(animation_library)
-    game_engine.add_observer(registry)
+    client.add_observer(registry)
 
     board_loader = BoardLoader(geometry)
     resizer = WindowResizer(geometry, board_mapper, board_loader, animation_library)
 
     score_data = ScoreData()
-    game_engine.add_observer(score_data)
+    client.add_observer(score_data)
     moves_log_data = MovesLogData()
-    game_engine.add_observer(moves_log_data)
+    client.add_observer(moves_log_data)
     game_over_data = GameOverData()
-    game_engine.add_observer(game_over_data)
+    client.add_observer(game_over_data)
 
     window = GameWindow(
         board_renderer=BoardRenderer(board_loader),
@@ -80,9 +81,7 @@ def main(player_name_by_color: dict[str, str] = DEFAULT_PLAYER_NAME_BY_COLOR) ->
         highlight_renderer=HighlightRenderer(geometry),
         rest_overlay_renderer=RestOverlayRenderer(geometry),
         extractor=MouseCommandExtractor(geometry),
-        command_sender=LocalCommandSender(controller),
-        game_engine=game_engine,
-        selection_source=controller,
+        client=client,
         clock=FrameClock(),
         registry=registry,
         score_renderer=ScoreRenderer(geometry),

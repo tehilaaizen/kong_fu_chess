@@ -4,7 +4,10 @@ from game_window import RESIZE_DEBOUNCE_FRAMES, GameWindow
 from input.commands import ClickCommand, JumpCommand
 
 
-class _FakeCommandSender:
+class _FakeClient:
+    """A GameClient whose send() records commands - these tests only
+    exercise mouse handling, so the other methods are never called."""
+
     def __init__(self) -> None:
         self.sent: list = []
 
@@ -47,16 +50,14 @@ class _FakeResizer:
         self.applied.append((width, height))
 
 
-def _window(extractor=None, command_sender=None, resizer=None):
+def _window(extractor=None, client=None, resizer=None):
     return GameWindow(
         board_renderer=None,
         piece_renderer=None,
         highlight_renderer=None,
         rest_overlay_renderer=None,
         extractor=extractor or _FakeExtractor(),
-        command_sender=command_sender or _FakeCommandSender(),
-        game_engine=None,
-        selection_source=None,
+        client=client or _FakeClient(),
         clock=None,
         registry=None,
         score_renderer=None,
@@ -71,40 +72,40 @@ def _window(extractor=None, command_sender=None, resizer=None):
 
 
 def test_left_button_down_sends_a_click_command():
-    sender = _FakeCommandSender()
-    window = _window(command_sender=sender)
+    client = _FakeClient()
+    window = _window(client=client)
 
     window._on_mouse_event(cv2.EVENT_LBUTTONDOWN, 150, 250, 0, None)
 
-    assert sender.sent == [ClickCommand(150, 250)]
+    assert client.sent == [ClickCommand(150, 250)]
 
 
 def test_right_button_down_sends_a_jump_command():
-    sender = _FakeCommandSender()
-    window = _window(command_sender=sender)
+    client = _FakeClient()
+    window = _window(client=client)
 
     window._on_mouse_event(cv2.EVENT_RBUTTONDOWN, 150, 250, 0, None)
 
-    assert sender.sent == [JumpCommand(150, 250)]
+    assert client.sent == [JumpCommand(150, 250)]
 
 
 def test_other_mouse_events_are_ignored():
-    sender = _FakeCommandSender()
-    window = _window(command_sender=sender)
+    client = _FakeClient()
+    window = _window(client=client)
 
     window._on_mouse_event(cv2.EVENT_MOUSEMOVE, 150, 250, 0, None)
     window._on_mouse_event(cv2.EVENT_LBUTTONUP, 150, 250, 0, None)
 
-    assert sender.sent == []
+    assert client.sent == []
 
 
 def test_a_click_outside_the_board_is_not_sent():
-    sender = _FakeCommandSender()
-    window = _window(extractor=_OutsideBoardExtractor(), command_sender=sender)
+    client = _FakeClient()
+    window = _window(extractor=_OutsideBoardExtractor(), client=client)
 
     window._on_mouse_event(cv2.EVENT_LBUTTONDOWN, 9999, 9999, 0, None)
 
-    assert sender.sent == []
+    assert client.sent == []
 
 
 def test_a_resize_is_applied_only_after_the_new_size_holds_for_the_debounce_window():
