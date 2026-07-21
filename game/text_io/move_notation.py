@@ -70,6 +70,27 @@ class MoveNotation:
         return MoveNotation._cell(cell, board_height, cell)
 
     @staticmethod
+    def format(color: str, kind: str, source: Position, destination: Position, board_height: int) -> str:
+        """Encode a move back into "WRa1a7" notation - the inverse of
+        parse, so a client that resolved a click into (source, destination)
+        can name the move for the wire. Color and kind are upper-cased to
+        the canonical wire form."""
+        return (
+            color.upper()
+            + kind.upper()
+            + MoveNotation.format_cell(source, board_height)
+            + MoveNotation.format_cell(destination, board_height)
+        )
+
+    @staticmethod
+    def format_cell(position: Position, board_height: int) -> str:
+        """Encode one Position as an algebraic cell like "e2" - the inverse
+        of parse_cell, flipping the rank back (rank = board_height - row)."""
+        file_char = chr(ord("a") + position.col)
+        rank = board_height - position.row
+        return f"{file_char}{rank}"
+
+    @staticmethod
     def _cell(cell: str, board_height: int, move: str) -> Position:
         """Convert one algebraic cell like "e2" to a Position, flipping the
         rank so rank 1 is the bottom row (row = board_height - rank)."""

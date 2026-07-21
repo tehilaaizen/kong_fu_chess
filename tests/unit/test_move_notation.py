@@ -38,6 +38,26 @@ def test_color_and_kind_are_case_insensitive():
     assert parsed.kind == "Q"
 
 
+def test_format_encodes_a_move_into_canonical_notation():
+    move = MoveNotation.format("w", "Q", Position(6, 4), Position(3, 4), BOARD_HEIGHT)
+
+    assert move == "WQe2e5"
+
+
+def test_format_cell_encodes_top_and_bottom_rows():
+    assert MoveNotation.format_cell(Position(7, 0), BOARD_HEIGHT) == "a1"  # bottom-left
+    assert MoveNotation.format_cell(Position(0, 7), BOARD_HEIGHT) == "h8"  # top-right
+
+
+def test_format_round_trips_through_parse():
+    parsed = MoveNotation.parse("bPa7a5", BOARD_HEIGHT)
+
+    reencoded = MoveNotation.format(parsed.color, parsed.kind, parsed.source, parsed.destination, BOARD_HEIGHT)
+
+    assert reencoded == "BPa7a5"  # canonical form upper-cases the color
+    assert MoveNotation.parse(reencoded, BOARD_HEIGHT) == parsed
+
+
 @pytest.mark.parametrize("bad", ["WQe2e", "WQe2e55", "", "WQe2"])
 def test_wrong_length_is_rejected(bad):
     with pytest.raises(InvalidMoveNotation):
