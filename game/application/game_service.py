@@ -73,6 +73,13 @@ class GameService:
         if session is not None:
             session.tick(elapsed_ms)
 
+    def tick_all(self, elapsed_ms: int) -> None:
+        """Advance every live game's time by elapsed_ms - the server's
+        periodic tick, so in-flight motions resolve into arrivals (and
+        broadcasts) even when no client is sending commands."""
+        for session in list(self._sessions.values()):
+            session.tick(elapsed_ms)
+
     def session(self, game_id: str) -> GameSession | None:
         """The live session for game_id, or None - used by the state-sync
         path to read a snapshot for broadcasting."""

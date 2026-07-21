@@ -52,10 +52,12 @@ class MessageDispatcher:
         game_service: GameService,
         connection_manager: ConnectionManager,
         game_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
+        start_board: str = STANDARD_START_BOARD,
     ) -> None:
         self._game_service = game_service
         self._connections = connection_manager
         self._game_id_factory = game_id_factory
+        self._start_board = start_board
         self._waiting_connection: str | None = None
 
     def dispatch(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
@@ -107,7 +109,7 @@ class MessageDispatcher:
         self._connections.assign_to_game(white_id, game_id, WHITE)
         self._connections.assign_to_game(black_id, game_id, BLACK)
 
-        session = self._game_service.create_session(game_id, white_user, black_user, STANDARD_START_BOARD)
+        session = self._game_service.create_session(game_id, white_user, black_user, self._start_board)
         started = schemas.game_started(white_user, black_user)
         snapshot = schemas.state_snapshot(board_grid(session.snapshot()), sequence=0, game_over=False)
 

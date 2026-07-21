@@ -105,3 +105,17 @@ def test_tick_on_an_unknown_game_is_a_no_op():
     service = GameService(RecordingPublisher())
 
     service.tick("nope", LONG_ENOUGH_MS)  # must not raise
+
+
+def test_tick_all_advances_every_live_game():
+    publisher = RecordingPublisher()
+    service = GameService(publisher)
+    service.create_session("g1", "a", "b", BOARD_TEXT)
+    service.create_session("g2", "c", "d", BOARD_TEXT)
+    service.handle_move("g1", "w", "WRa1a7")
+    service.handle_move("g2", "w", "WRa1a7")
+
+    service.tick_all(LONG_ENOUGH_MS)
+
+    applied = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
+    assert {e.game_id for e in applied} == {"g1", "g2"}
