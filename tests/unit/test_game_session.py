@@ -6,7 +6,13 @@ from application.game_session import (
 )
 from engine.game_engine import GameEngine
 from engine.game_snapshot import GameSnapshot
-from messaging.application_events import GameEndedEvent, GameMoveAppliedEvent
+from messaging.application_events import (
+    GameEndedEvent,
+    GameMoveAppliedEvent,
+    JumpStartedEvent,
+    MotionStartedEvent,
+    RestStartedEvent,
+)
 from model.position import Position
 from realtime.real_time_arbiter import RealTimeArbiter
 from rules.rule_engine import RuleEngine
@@ -76,14 +82,30 @@ def test_a_move_from_an_empty_source_is_rejected():
     assert result.reason == EMPTY_SOURCE
 
 
-def test_a_legal_move_is_accepted_and_publishes_on_arrival():
+def test_accepting_a_move_immediately_publishes_a_motion_started():
     publisher = RecordingPublisher()
     session = _session(publisher)
 
     accepted = session.request_move(_move("WRa1a7", session), "w")
     assert accepted.is_accepted is True
-    assert publisher.events == []  # nothing until it actually arrives
 
+    started = [e for e in publisher.events if isinstance(e, MotionStartedEvent)]
+    assert len(started) == 1
+    assert started[0].game_id == "g1"
+    assert started[0].color == "w"
+    assert started[0].kind == "R"
+    assert started[0].source == Position(7, 0)
+    assert started[0].destination == Position(1, 0)
+    assert started[0].duration_ms > 0
+    # No arrival yet - only the motion-started, nothing has landed.
+    assert [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)] == []
+
+
+def test_a_legal_move_publishes_on_arrival_after_it_lands():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    session.request_move(_move("WRa1a7", session), "w")
     session.tick(LONG_ENOUGH_MS)
 
     applied = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
@@ -94,6 +116,49 @@ def test_a_legal_move_is_accepted_and_publishes_on_arrival():
     assert applied[0].color == "w"
     assert applied[0].kind == "R"
     assert applied[0].captured_kind is None
+
+
+def test_the_motion_started_and_arrival_carry_the_same_piece_id():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    session.request_move(_move("WRa1a7", session), "w")
+    session.tick(LONG_ENOUGH_MS)
+
+    started = next(e for e in publisher.events if isinstance(e, MotionStartedEvent))
+    applied = next(e for e in publisher.events if isinstance(e, GameMoveAppliedEvent))
+    assert started.piece_id == applied.piece_id  # one stable id keys the client's animator
+
+
+def test_an_arrival_publishes_a_rest_started_for_the_moved_piece():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    session.request_move(_move("WRa1a7", session), "w")
+    session.tick(LONG_ENOUGH_MS)
+
+    rests = [e for e in publisher.events if isinstance(e, RestStartedEvent)]
+    assert len(rests) == 1
+    assert rests[0].game_id == "g1"
+    assert rests[0].color == "w"
+    assert rests[0].kind == "R"
+    assert rests[0].label == "long_rest"
+    assert rests[0].duration_ms > 0
+
+
+def test_accepting_a_jump_immediately_publishes_a_jump_started():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    session.request_jump(Position(7, 0), "w")
+
+    started = [e for e in publisher.events if isinstance(e, JumpStartedEvent)]
+    assert len(started) == 1
+    assert started[0].game_id == "g1"
+    assert started[0].color == "w"
+    assert started[0].kind == "R"
+    assert started[0].position == Position(7, 0)
+    assert started[0].duration_ms > 0
 
 
 def test_capturing_the_king_publishes_a_capture_and_game_ended():

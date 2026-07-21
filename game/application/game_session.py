@@ -5,9 +5,16 @@ from typing import Protocol
 from engine.game_engine import MoveResult
 from engine.game_snapshot import GameSnapshot
 from model.board import Board
+from model.piece import Piece
 from model.position import Position
 from realtime.real_time_arbiter import ArrivalEvent
-from messaging.application_events import GameEndedEvent, GameMoveAppliedEvent
+from messaging.application_events import (
+    GameEndedEvent,
+    GameMoveAppliedEvent,
+    JumpStartedEvent,
+    MotionStartedEvent,
+    RestStartedEvent,
+)
 from text_io.move_notation import ParsedMove
 
 # Application-level rejection reasons, distinct from the engine's own
@@ -33,9 +40,12 @@ class Publisher(Protocol):
 class GameSession:
     """Owns one running game: its Board, GameEngine, the two players'
     identities, and a monotonic sequence number. Registers itself as the
-    engine's observer, so every arrival/game-over is translated into an
-    application event published (tagged with this game's id) on the
-    injected Publisher. Every engine call for this game goes through here,
+    engine's observer, so every domain event - a motion/jump/rest starting,
+    an arrival, a game-over - is translated into an application event
+    published (tagged with this game's id) on the injected Publisher. Those
+    start/rest events let a remote client drive the exact same view
+    animations the local one does, rather than only seeing post-arrival
+    board snapshots. Every engine call for this game goes through here,
     behind ownership checks the engine itself has no concept of."""
 
     def __init__(
@@ -50,7 +60,9 @@ class GameSession:
         """board and engine are this game's own instances; white_user /
         black_user are the players' display identities; publisher receives
         the translated application events. Registers self as the engine's
-        observer (for on_arrival / on_game_over)."""
+        observer (for on_motion_started / on_jump_started / on_rest_started /
+        on_arrival / on_game_over - add_observer subscribes it to exactly
+        the hooks it implements)."""
         self._game_id = game_id
         self._board = board
         self._engine = engine
@@ -110,15 +122,60 @@ class GameSession:
         """The current board state to broadcast to this game's clients."""
         return self._engine.snapshot()
 
+    def on_motion_started(self, piece: Piece, source: Position, destination: Position, duration_ms: int) -> None:
+        """Engine observer hook: a move was accepted and started travelling -
+        publish it so a remote client can play the same slide animation."""
+        self._publisher.publish(
+            MotionStartedEvent(
+                game_id=self._game_id,
+                piece_id=piece.id,
+                color=piece.color,
+                kind=piece.kind,
+                source=source,
+                destination=destination,
+                duration_ms=duration_ms,
+            )
+        )
+
+    def on_jump_started(self, piece: Piece, position: Position, duration_ms: int) -> None:
+        """Engine observer hook: a piece went airborne - publish it so a
+        remote client can play the same jump animation."""
+        self._publisher.publish(
+            JumpStartedEvent(
+                game_id=self._game_id,
+                piece_id=piece.id,
+                color=piece.color,
+                kind=piece.kind,
+                position=position,
+                duration_ms=duration_ms,
+            )
+        )
+
+    def on_rest_started(self, piece: Piece, duration_ms: int, label: str) -> None:
+        """Engine observer hook: a piece entered a cooldown - publish it so
+        a remote client can draw the same draining rest overlay."""
+        self._publisher.publish(
+            RestStartedEvent(
+                game_id=self._game_id,
+                piece_id=piece.id,
+                color=piece.color,
+                kind=piece.kind,
+                duration_ms=duration_ms,
+                label=label,
+            )
+        )
+
     def on_arrival(self, event: ArrivalEvent) -> None:
         """Engine observer hook: a motion arrived - bump the sequence and
-        publish it as a GameMoveAppliedEvent tagged with this game's id."""
+        publish it as a GameMoveAppliedEvent tagged with this game's id (and
+        the arriving piece's stable id, so a client can key its animator)."""
         self._sequence += 1
         captured_kind = event.captured_piece.kind if event.captured_piece is not None else None
         self._publisher.publish(
             GameMoveAppliedEvent(
                 game_id=self._game_id,
                 sequence=self._sequence,
+                piece_id=event.piece.id,
                 source=event.source,
                 destination=event.destination,
                 color=event.piece.color,

@@ -72,6 +72,7 @@ def test_an_event_for_an_unknown_game_broadcasts_nothing():
         GameMoveAppliedEvent(
             game_id="ghost",
             sequence=1,
+            piece_id=1,
             source=Position(0, 0),
             destination=Position(0, 1),
             color="w",
