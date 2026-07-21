@@ -334,6 +334,7 @@ class SpyObserver:
         self.jumps_started: list = []
         self.rests_started: list = []
         self.game_overs: int = 0
+        self.game_over_losers: list = []
 
     def on_arrival(self, event) -> None:
         self.arrivals.append(event)
@@ -347,8 +348,9 @@ class SpyObserver:
     def on_rest_started(self, piece, duration_ms, label) -> None:
         self.rests_started.append((piece, duration_ms, label))
 
-    def on_game_over(self) -> None:
+    def on_game_over(self, loser_color) -> None:
         self.game_overs += 1
+        self.game_over_losers.append(loser_color)
 
 
 class ArrivalOnlyObserver:
@@ -434,6 +436,7 @@ def test_wait_notifies_on_game_over_when_an_arrival_captures_the_king():
     engine.wait(1000)
 
     assert observer.game_overs == 1
+    assert observer.game_over_losers == ["b"]  # the captured king was black
 
 
 def test_wait_does_not_notify_on_game_over_when_no_king_is_captured():

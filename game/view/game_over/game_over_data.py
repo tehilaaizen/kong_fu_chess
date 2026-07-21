@@ -15,7 +15,8 @@ class GameOverData:
         """Whether the game has ended (a king was captured)."""
         return self._is_over
 
-    def on_game_over(self) -> None:
+    def on_game_over(self, loser_color: str) -> None:
         """Record that the game just ended, so the banner shows from now
-        on."""
+        on. loser_color (the captured king's color) is part of the
+        observer contract; the local banner doesn't use it yet."""
         self._is_over = True

@@ -59,8 +59,9 @@ class RestStartedObserver(Protocol):
 class GameOverObserver(Protocol):
     """Notified when the game ended (a king was captured)."""
 
-    def on_game_over(self) -> None:
-        """Handle the game ending."""
+    def on_game_over(self, loser_color: str) -> None:
+        """Handle the game ending. loser_color is the color of the
+        captured king ("w"/"b"); the winner is the other color."""
         ...
 
 
@@ -174,10 +175,11 @@ class GameEngine:
         for observer in self._rest_started_observers:
             observer.on_rest_started(piece, duration_ms, label)
 
-    def _notify_game_over(self) -> None:
-        """Tell every game-over observer that the game just ended."""
+    def _notify_game_over(self, loser_color: str) -> None:
+        """Tell every game-over observer that the game just ended, passing
+        the captured king's color so consumers can work out the winner."""
         for observer in self._game_over_observers:
-            observer.on_game_over()
+            observer.on_game_over(loser_color)
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         """Request a move from source to destination. Rejected outright
@@ -252,7 +254,7 @@ class GameEngine:
 
             if not self.is_game_over() and self._ends_the_game(event.captured_piece):
                 self.mark_game_over()
-                self._notify_game_over()
+                self._notify_game_over(event.captured_piece.color)
 
         for rest_start in self._real_time_arbiter.take_rest_starts():
             self._notify_rest_started(rest_start.piece, rest_start.duration_ms, rest_start.label)

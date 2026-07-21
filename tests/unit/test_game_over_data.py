@@ -15,7 +15,7 @@ def test_a_new_game_is_not_over():
 def test_on_game_over_marks_the_game_over():
     data = GameOverData()
 
-    data.on_game_over()
+    data.on_game_over("b")
 
     assert data.is_over() is True
 

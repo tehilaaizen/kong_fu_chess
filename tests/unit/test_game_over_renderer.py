@@ -22,7 +22,7 @@ def test_render_once_the_game_is_over_draws_the_banner():
     canvas = BoardLoader(geometry).fresh_canvas()
     before = canvas.img.copy()
     data = GameOverData()
-    data.on_game_over()
+    data.on_game_over("b")
 
     result = GameOverRenderer(geometry).render(canvas, data)
 
