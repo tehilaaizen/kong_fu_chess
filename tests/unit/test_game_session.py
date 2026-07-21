@@ -1,0 +1,144 @@
+from application.game_session import (
+    EMPTY_SOURCE,
+    NOT_YOUR_PIECE,
+    PIECE_MISMATCH,
+    GameSession,
+)
+from engine.game_engine import GameEngine
+from engine.game_snapshot import GameSnapshot
+from messaging.application_events import GameEndedEvent, GameMoveAppliedEvent
+from model.position import Position
+from realtime.real_time_arbiter import RealTimeArbiter
+from rules.rule_engine import RuleEngine
+from text_io.board_parser import BoardParser
+from text_io.move_notation import MoveNotation
+
+# White rook on a1 (row 7), lone black king on a8 (row 0).
+BOARD_TEXT = "\n".join(
+    [
+        "bK . . . . . . .",
+        ". . . . . . . .",
+        ". . . . . . . .",
+        ". . . . . . . .",
+        ". . . . . . . .",
+        ". . . . . . . .",
+        ". . . . . . . .",
+        "wR . . . . . . .",
+    ]
+)
+LONG_ENOUGH_MS = 100_000  # more than any single motion here takes to arrive
+
+
+class RecordingPublisher:
+    def __init__(self) -> None:
+        self.events: list = []
+
+    def publish(self, event) -> None:
+        self.events.append(event)
+
+
+def _session(publisher):
+    board = BoardParser.parse(BOARD_TEXT)
+    engine = GameEngine(board, RuleEngine(), RealTimeArbiter(board))
+    return GameSession("g1", board, engine, "alice", "bob", publisher)
+
+
+def _move(text, session):
+    return MoveNotation.parse(text, session.board_height)
+
+
+def test_a_move_for_the_other_color_is_rejected():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    result = session.request_move(_move("WRa1a7", session), "b")
+
+    assert result.is_accepted is False
+    assert result.reason == NOT_YOUR_PIECE
+    assert publisher.events == []
+
+
+def test_a_move_whose_stated_kind_does_not_match_the_piece_is_rejected():
+    session = _session(RecordingPublisher())
+
+    result = session.request_move(_move("WQa1a7", session), "w")  # a1 holds R, not Q
+
+    assert result.is_accepted is False
+    assert result.reason == PIECE_MISMATCH
+
+
+def test_a_move_from_an_empty_source_is_rejected():
+    session = _session(RecordingPublisher())
+
+    result = session.request_move(_move("WRb1b4", session), "w")  # b1 is empty
+
+    assert result.is_accepted is False
+    assert result.reason == EMPTY_SOURCE
+
+
+def test_a_legal_move_is_accepted_and_publishes_on_arrival():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    accepted = session.request_move(_move("WRa1a7", session), "w")
+    assert accepted.is_accepted is True
+    assert publisher.events == []  # nothing until it actually arrives
+
+    session.tick(LONG_ENOUGH_MS)
+
+    applied = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
+    assert len(applied) == 1
+    assert applied[0].sequence == 1
+    assert applied[0].source == Position(7, 0)
+    assert applied[0].destination == Position(1, 0)
+    assert applied[0].color == "w"
+    assert applied[0].kind == "R"
+    assert applied[0].captured_kind is None
+
+
+def test_capturing_the_king_publishes_a_capture_and_game_ended():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    session.request_move(_move("WRa1a8", session), "w")  # rook slides up and takes a8 king
+    session.tick(LONG_ENOUGH_MS)
+
+    applied = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
+    ended = [e for e in publisher.events if isinstance(e, GameEndedEvent)]
+    assert applied[0].captured_kind == "K"
+    assert ended == [GameEndedEvent(game_id="g1", winner="w")]
+
+
+def test_jumping_your_own_piece_is_accepted():
+    session = _session(RecordingPublisher())
+
+    result = session.request_jump(Position(7, 0), "w")
+
+    assert result.is_accepted is True
+
+
+def test_jumping_an_empty_cell_is_rejected():
+    session = _session(RecordingPublisher())
+
+    result = session.request_jump(Position(4, 4), "w")
+
+    assert result.is_accepted is False
+    assert result.reason == EMPTY_SOURCE
+
+
+def test_jumping_an_opponents_piece_is_rejected():
+    session = _session(RecordingPublisher())
+
+    result = session.request_jump(Position(7, 0), "b")  # a1 is a white rook
+
+    assert result.is_accepted is False
+    assert result.reason == NOT_YOUR_PIECE
+
+
+def test_snapshot_reports_the_current_board():
+    session = _session(RecordingPublisher())
+
+    snapshot = session.snapshot()
+
+    assert isinstance(snapshot, GameSnapshot)
+    assert {(p.color, p.kind) for p in snapshot.pieces} == {("w", "R"), ("b", "K")}

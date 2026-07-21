@@ -60,6 +60,16 @@ class MoveNotation:
         return ParsedMove(color=color, kind=kind, source=source, destination=destination)
 
     @staticmethod
+    def parse_cell(cell: str, board_height: int) -> Position:
+        """Convert a lone algebraic cell like "e2" to a Position - used
+        for a jump command, which targets one cell rather than a move.
+        Raises InvalidMoveNotation if cell isn't a two-character
+        file+rank."""
+        if len(cell) != 2:
+            raise InvalidMoveNotation(f"cell must be 2 characters, got {cell!r}")
+        return MoveNotation._cell(cell, board_height, cell)
+
+    @staticmethod
     def _cell(cell: str, board_height: int, move: str) -> Position:
         """Convert one algebraic cell like "e2" to a Position, flipping the
         rank so rank 1 is the bottom row (row = board_height - rank)."""
