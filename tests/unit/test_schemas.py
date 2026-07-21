@@ -54,12 +54,66 @@ def test_move_rejected_omits_correlation_id_when_absent():
     assert "correlation_id" not in message
 
 
-def test_state_snapshot_carries_board_sequence_and_game_over():
-    grid = [["wR", "."], [".", "bK"]]
+def test_state_snapshot_carries_pieces_dimensions_sequence_and_game_over():
+    pieces = [{"id": 1, "color": "w", "kind": "R", "row": 1, "col": 0}]
 
-    message = schemas.state_snapshot(board=grid, sequence=3, game_over=False)
+    message = schemas.state_snapshot(pieces=pieces, width=8, height=8, sequence=3, game_over=False)
 
-    assert message == {"type": "state_snapshot", "payload": {"board": grid, "sequence": 3, "game_over": False}}
+    assert message == {
+        "type": "state_snapshot",
+        "payload": {"pieces": pieces, "width": 8, "height": 8, "sequence": 3, "game_over": False},
+    }
+
+
+def test_motion_started_names_the_piece_and_the_travel():
+    message = schemas.motion_started(
+        piece_id=7, color="w", kind="R", source={"row": 7, "col": 0}, destination={"row": 1, "col": 0}, duration_ms=500
+    )
+
+    assert message["type"] == "motion_started"
+    assert message["payload"] == {
+        "piece": {"id": 7, "color": "w", "kind": "R"},
+        "source": {"row": 7, "col": 0},
+        "destination": {"row": 1, "col": 0},
+        "duration_ms": 500,
+    }
+
+
+def test_jump_started_names_the_piece_and_its_cell():
+    message = schemas.jump_started(piece_id=7, color="b", kind="N", cell={"row": 0, "col": 1}, duration_ms=300)
+
+    assert message["type"] == "jump_started"
+    assert message["payload"] == {
+        "piece": {"id": 7, "color": "b", "kind": "N"},
+        "cell": {"row": 0, "col": 1},
+        "duration_ms": 300,
+    }
+
+
+def test_rest_started_names_the_piece_duration_and_label():
+    message = schemas.rest_started(piece_id=7, color="w", kind="P", duration_ms=5000, label="long_rest")
+
+    assert message["type"] == "rest_started"
+    assert message["payload"] == {
+        "piece": {"id": 7, "color": "w", "kind": "P"},
+        "duration_ms": 5000,
+        "label": "long_rest",
+    }
+
+
+def test_arrival_names_the_piece_the_cells_and_the_captured_kind():
+    message = schemas.arrival(
+        piece_id=7, color="w", kind="R", source={"row": 7, "col": 0}, destination={"row": 0, "col": 0},
+        captured_kind="K",
+    )
+
+    assert message["type"] == "arrival"
+    assert message["payload"] == {
+        "piece": {"id": 7, "color": "w", "kind": "R"},
+        "source": {"row": 7, "col": 0},
+        "destination": {"row": 0, "col": 0},
+        "captured_kind": "K",
+    }
 
 
 def test_game_over_message_names_the_winner_and_reason():
@@ -73,6 +127,6 @@ def test_game_started_and_error_and_pong():
 
 
 def test_serialize_round_trips_through_json():
-    message = schemas.state_snapshot(board=[["."]], sequence=1, game_over=True)
+    message = schemas.state_snapshot(pieces=[], width=1, height=1, sequence=1, game_over=True)
 
     assert json.loads(schemas.serialize(message)) == message

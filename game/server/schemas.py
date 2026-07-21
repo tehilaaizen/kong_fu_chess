@@ -61,9 +61,75 @@ def _envelope(message_type: str, payload: dict, correlation_id: str | None = Non
     return message
 
 
-def state_snapshot(board: list[list[str]], sequence: int, game_over: bool) -> dict:
-    """Full board state broadcast (also used on reconnect)."""
-    return _envelope("state_snapshot", {"board": board, "sequence": sequence, "game_over": game_over})
+def _piece_ref(piece_id: int, color: str, kind: str) -> dict:
+    """The {id, color, kind} identity a client needs to key a piece's
+    animator and know what sprite to draw - shared by every event that
+    names a piece."""
+    return {"id": piece_id, "color": color, "kind": kind}
+
+
+def state_snapshot(pieces: list[dict], width: int, height: int, sequence: int, game_over: bool) -> dict:
+    """Full board state broadcast (also used on reconnect): every piece as
+    an {id, color, kind, row, col} record (see application.dto.board_placements),
+    the board dimensions, and the game's monotonic sequence. Carrying ids -
+    not just a token grid - lets a client rebuild an id-keyed snapshot whose
+    ids match the motion/arrival events."""
+    return _envelope(
+        "state_snapshot",
+        {"pieces": pieces, "width": width, "height": height, "sequence": sequence, "game_over": game_over},
+    )
+
+
+def motion_started(
+    piece_id: int, color: str, kind: str, source: dict, destination: dict, duration_ms: int
+) -> dict:
+    """Broadcast when a move was accepted and the piece began travelling:
+    lets a client play the same slide animation from source to destination
+    over duration_ms. source/destination are {row, col} records."""
+    return _envelope(
+        "motion_started",
+        {
+            "piece": _piece_ref(piece_id, color, kind),
+            "source": source,
+            "destination": destination,
+            "duration_ms": duration_ms,
+        },
+    )
+
+
+def jump_started(piece_id: int, color: str, kind: str, cell: dict, duration_ms: int) -> dict:
+    """Broadcast when a piece went airborne in place at cell for
+    duration_ms. cell is a {row, col} record."""
+    return _envelope(
+        "jump_started",
+        {"piece": _piece_ref(piece_id, color, kind), "cell": cell, "duration_ms": duration_ms},
+    )
+
+
+def rest_started(piece_id: int, color: str, kind: str, duration_ms: int, label: str) -> dict:
+    """Broadcast when a piece entered a cooldown for duration_ms; label is
+    "long_rest" after a move or "short_rest" after a jump, so a client can
+    drive the draining rest overlay."""
+    return _envelope(
+        "rest_started",
+        {"piece": _piece_ref(piece_id, color, kind), "duration_ms": duration_ms, "label": label},
+    )
+
+
+def arrival(piece_id: int, color: str, kind: str, source: dict, destination: dict, captured_kind: str | None) -> dict:
+    """Broadcast when a motion logically arrived: lets a client re-drive the
+    same on_arrival observers (score, moves log, promotion kind-sync).
+    captured_kind is the captured piece's kind, or None if nothing was
+    captured. source/destination are {row, col} records."""
+    return _envelope(
+        "arrival",
+        {
+            "piece": _piece_ref(piece_id, color, kind),
+            "source": source,
+            "destination": destination,
+            "captured_kind": captured_kind,
+        },
+    )
 
 
 def move_accepted(correlation_id: str | None) -> dict:

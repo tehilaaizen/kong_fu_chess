@@ -74,13 +74,15 @@ def test_two_players_connect_join_move_and_finish_with_a_king_capture():
     assert _messages(accepted)[0]["type"] == "move_accepted"
     assert _messages(accepted)[0]["correlation_id"] == "w1"
 
-    # (6) once the motion resolves on a tick, both clients get the updated
-    # board and then game_over naming White the winner
+    # (6) the accepted move broadcasts motion_started at once; once it
+    # resolves on a tick both clients get the arrival, the corrective
+    # snapshot, game_over naming White the winner, and the mover's cooldown
     service.tick_all(LONG_ENOUGH_MS)
     types_by_conn = {"c1": [], "c2": []}
     for outgoing in broadcasts:
         types_by_conn[outgoing.connection_id].append(outgoing.message["type"])
-    assert types_by_conn["c1"] == ["state_snapshot", "game_over"]
-    assert types_by_conn["c2"] == ["state_snapshot", "game_over"]
+    expected = ["motion_started", "arrival", "state_snapshot", "game_over", "rest_started"]
+    assert types_by_conn["c1"] == expected
+    assert types_by_conn["c2"] == expected
     game_over = next(o for o in broadcasts if o.message["type"] == "game_over")
     assert game_over.message["payload"]["winner"] == "w"

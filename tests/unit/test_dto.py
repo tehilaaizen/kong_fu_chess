@@ -1,9 +1,9 @@
-from application.dto import EMPTY_CELL, board_grid
+from application.dto import board_placements, cell
 from engine.game_snapshot import GameSnapshot, PiecePlacement
 from model.position import Position
 
 
-def test_board_grid_places_each_piece_and_leaves_the_rest_empty():
+def test_board_placements_serializes_each_piece_with_its_id_and_cell():
     snapshot = GameSnapshot(
         board_width=3,
         board_height=2,
@@ -13,15 +13,19 @@ def test_board_grid_places_each_piece_and_leaves_the_rest_empty():
         ],
     )
 
-    grid = board_grid(snapshot)
+    placements = board_placements(snapshot)
 
-    assert grid == [
-        [EMPTY_CELL, EMPTY_CELL, "bK"],
-        ["wR", EMPTY_CELL, EMPTY_CELL],
+    assert placements == [
+        {"id": 1, "color": "w", "kind": "R", "row": 1, "col": 0},
+        {"id": 2, "color": "b", "kind": "K", "row": 0, "col": 2},
     ]
 
 
-def test_an_empty_board_is_all_empty_cells():
+def test_an_empty_board_serializes_to_no_placements():
     snapshot = GameSnapshot(board_width=2, board_height=2, pieces=[])
 
-    assert board_grid(snapshot) == [[EMPTY_CELL, EMPTY_CELL], [EMPTY_CELL, EMPTY_CELL]]
+    assert board_placements(snapshot) == []
+
+
+def test_cell_serializes_a_position_to_row_and_col():
+    assert cell(Position(3, 5)) == {"row": 3, "col": 5}

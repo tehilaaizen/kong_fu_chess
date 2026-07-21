@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Callable
 
-from application.dto import board_grid
+from application.dto import board_placements
 from application.game_service import GameService
 from server import schemas
 from server.connection_manager import ConnectionManager
@@ -111,7 +111,10 @@ class MessageDispatcher:
 
         session = self._game_service.create_session(game_id, white_user, black_user, self._start_board)
         started = schemas.game_started(white_user, black_user)
-        snapshot = schemas.state_snapshot(board_grid(session.snapshot()), sequence=0, game_over=False)
+        opening = session.snapshot()
+        snapshot = schemas.state_snapshot(
+            board_placements(opening), opening.board_width, opening.board_height, sequence=0, game_over=False
+        )
 
         return [
             Outgoing(white_id, started),
