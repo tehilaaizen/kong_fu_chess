@@ -33,12 +33,15 @@ def main(username: str, uri: str = DEFAULT_SERVER_URI) -> None:
     Blocks during the handshake until an opponent joins and the opening
     board arrives; the view half is built by the shared
     app_support.build_game_window."""
+    print(f"Connecting to {uri} as '{username}'...")
     connection = WebSocketConnection()
     connection.start(uri)
     connection.send(client_messages.connect(username))
     connection.send(client_messages.join_game())
+    print("Connected. Waiting for an opponent to join (leave this running)...")
 
     initial_snapshot, player_names = _await_game_start(connection)
+    print("Opponent found - opening the board...")
 
     board = Board(initial_snapshot.board_width, initial_snapshot.board_height)
     board_mapper = BoardMapper(board)
