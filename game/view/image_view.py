@@ -59,6 +59,13 @@ class Img:
 
         return self
 
+    def blank(self, width: int, height: int, color: tuple[int, int, int] = (0, 0, 0)) -> "Img":
+        """Fill self with a solid BGR color canvas of the given pixel size -
+        the starting surface for a screen that is drawn rather than loaded
+        from a file. Returns self for chaining."""
+        self.img = np.full((height, width, 3), color, dtype=np.uint8)
+        return self
+
     def to_rgba(self) -> "Img":
         """Ensure self.img has 4 channels (BGRA), converting from 3
         channels (BGR) if needed. A source with no alpha data gains a
