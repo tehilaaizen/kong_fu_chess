@@ -145,6 +145,19 @@ def move_rejected(reason: str, correlation_id: str | None) -> dict:
     return _envelope("move_rejected", {"reason": reason}, correlation_id)
 
 
+def auth_ok(username: str, rating: int, correlation_id: str | None = None) -> dict:
+    """Reply to a successful register/login: the authenticated username and
+    their current rating, correlated to the request."""
+    return _envelope("auth_ok", {"username": username, "rating": rating}, correlation_id)
+
+
+def auth_failed(reason: str, correlation_id: str | None = None) -> dict:
+    """Reply to a failed register/login, carrying a stable reason
+    (username_taken / no_such_user / wrong_password) so the client can react
+    - e.g. auto-register an unknown user."""
+    return _envelope("auth_failed", {"reason": reason}, correlation_id)
+
+
 def game_started(white_user: str, black_user: str) -> dict:
     """Broadcast when a game begins (drives start animation/sound)."""
     return _envelope("game_started", {"white": white_user, "black": black_user})

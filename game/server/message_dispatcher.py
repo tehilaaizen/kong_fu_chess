@@ -4,6 +4,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Callable
 
+from application.auth_service import AuthResult, AuthService
 from application.dto import board_placements
 from application.game_service import GameService
 from server import schemas
@@ -49,20 +50,23 @@ class MessageDispatcher:
     messages to send back, calling the application services. Pure and
     synchronous - the async gateway owns the sockets and the event loop;
     this owns none of that, so the whole command vocabulary is unit
-    testable. Players join by room name (delegated to a RoomRegistry): the
-    first into a room is White, the second is Black and starts the game,
-    and everyone after that is a spectator who watches but cannot play."""
+    testable. A connection first authenticates (register or login), then
+    joins by room name (delegated to a RoomRegistry): the first into a room
+    is White, the second is Black and starts the game, and everyone after
+    that is a spectator who watches but cannot play."""
 
     def __init__(
         self,
         game_service: GameService,
         connection_manager: ConnectionManager,
+        auth_service: AuthService,
         game_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
         start_board: str = STANDARD_START_BOARD,
         room_registry: RoomRegistry | None = None,
     ) -> None:
         self._game_service = game_service
         self._connections = connection_manager
+        self._auth = auth_service
         self._game_id_factory = game_id_factory
         self._start_board = start_board
         self._rooms = room_registry if room_registry is not None else RoomRegistry()
@@ -72,7 +76,8 @@ class MessageDispatcher:
         State changes that resolve later in time (a motion arriving) are
         broadcast separately by the Broadcaster, not from here."""
         handlers = {
-            "connect": self._connect,
+            "register": self._register,
+            "login": self._login,
             "join_room": self._join_room,
             "make_move": self._make_move,
             "jump_request": self._jump_request,
@@ -83,13 +88,32 @@ class MessageDispatcher:
             return [Outgoing(connection_id, schemas.error("UNKNOWN_TYPE", f"unknown message type {inbound.type!r}"))]
         return handler(connection_id, inbound)
 
-    def _connect(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
-        """Identify a connection by its username (Phase A: no password)."""
+    def _register(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
+        """Create a new account and identify the connection as it."""
+        return self._authenticate(connection_id, inbound, self._auth.register)
+
+    def _login(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
+        """Authenticate an existing account and identify the connection."""
+        return self._authenticate(connection_id, inbound, self._auth.login)
+
+    def _authenticate(
+        self, connection_id: str, inbound: InboundMessage, auth_call: Callable[[str, str], AuthResult]
+    ) -> list[Outgoing]:
+        """Run one register/login attempt: validate the credentials are
+        present, call auth_call, and on success identify the connection by
+        the authenticated username (replying auth_ok with its rating) or else
+        reply auth_failed with the reason."""
         username = inbound.payload.get("username")
-        if not isinstance(username, str) or not username:
-            return [Outgoing(connection_id, schemas.error("MISSING_FIELD", "connect requires a username"))]
-        self._connections.register(connection_id, username)
-        return []
+        password = inbound.payload.get("password")
+        if not isinstance(username, str) or not username or not isinstance(password, str) or not password:
+            return [Outgoing(connection_id, schemas.error("MISSING_FIELD", "a username and password are required"))]
+
+        result = auth_call(username, password)
+        if not result.is_authenticated:
+            return [Outgoing(connection_id, schemas.auth_failed(result.reason, inbound.message_id))]
+
+        self._connections.register(connection_id, result.user.username)
+        return [Outgoing(connection_id, schemas.auth_ok(result.user.username, result.user.rating, inbound.message_id))]
 
     def _join_room(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Join the room named in the payload. The first connection into a

@@ -21,6 +21,9 @@ htmlcov/
 # Server logs
 logs/
 
+# SQLite database
+*.db
+
 # Editor / OS
 .vscode/
 .idea/

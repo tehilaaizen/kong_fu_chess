@@ -3,9 +3,12 @@ real command path (dispatcher -> GameService -> GameEngine) and the real
 broadcast path (bus -> Broadcaster), with no sockets or event loop - the
 async GameServer is only the transport around exactly these pieces."""
 
+from application.auth_service import AuthService
 from application.game_service import GameService
 from application.game_session import NOT_YOUR_PIECE
+from application.password_hasher import PasswordHasher
 from messaging.application_message_bus import ApplicationMessageBus
+from persistence.in_memory.user_repository import InMemoryUserRepository
 from server.broadcaster import Broadcaster
 from server.connection_manager import ConnectionManager
 from server.message_dispatcher import MessageDispatcher
@@ -35,7 +38,10 @@ def _wire():
     bus = ApplicationMessageBus()
     service = GameService(bus)
     connections = ConnectionManager()
-    dispatcher = MessageDispatcher(service, connections, game_id_factory=lambda: "g1", start_board=QUICK_BOARD)
+    auth = AuthService(InMemoryUserRepository(), PasswordHasher())
+    dispatcher = MessageDispatcher(
+        service, connections, auth, game_id_factory=lambda: "g1", start_board=QUICK_BOARD
+    )
     broadcasts: list = []
     broadcaster = Broadcaster(service, connections, broadcasts.append)
     bus.subscribe(broadcaster.handle)
@@ -49,10 +55,12 @@ def _messages(outgoing):
 def test_two_players_connect_join_move_and_finish_with_a_king_capture():
     dispatcher, service, broadcasts = _wire()
 
-    # (1) both identify by username and join the same room by name; the
-    # first into the room is White, the second is Black
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
-    dispatcher.dispatch("c2", _inbound("connect", {"username": "bob"}))
+    # (1) both register (username + password) and join the same room by name;
+    # the first into the room is White, the second is Black
+    alice_auth = dispatcher.dispatch("c1", _inbound("register", {"username": "alice", "password": "pw1"}))
+    dispatcher.dispatch("c2", _inbound("register", {"username": "bob", "password": "pw2"}))
+    assert _messages(alice_auth)[0]["type"] == "auth_ok"
+    assert _messages(alice_auth)[0]["payload"]["rating"] == 1200
     dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
     start = dispatcher.dispatch("c2", _inbound("join_room", {"room": "lobby"}))
 
@@ -63,7 +71,7 @@ def test_two_players_connect_join_move_and_finish_with_a_king_capture():
 
     # (2b) a third joiner of the same room is seated as a spectator and shown
     # the game already in progress
-    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    dispatcher.dispatch("c3", _inbound("register", {"username": "carol", "password": "pw3"}))
     spectate = dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
     assert [m["type"] for m in _messages(spectate)] == ["game_started", "state_snapshot"]
 

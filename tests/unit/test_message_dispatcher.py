@@ -1,9 +1,21 @@
+from application.auth_service import AuthService
 from application.game_service import GameService
 from application.game_session import NOT_YOUR_PIECE
 from messaging.application_message_bus import ApplicationMessageBus
+from persistence.in_memory.user_repository import InMemoryUserRepository
 from server.connection_manager import ConnectionManager
 from server.message_dispatcher import MessageDispatcher, Outgoing
 from server.schemas import InboundMessage
+
+
+class _FakeHasher:
+    """A trivial reversible "hash" so these tests skip scrypt's cost."""
+
+    def hash(self, password: str) -> str:
+        return f"H:{password}"
+
+    def verify(self, password: str, stored: str) -> bool:
+        return stored == f"H:{password}"
 
 
 def _inbound(message_type, payload=None, message_id=None):
@@ -13,17 +25,26 @@ def _inbound(message_type, payload=None, message_id=None):
 def _dispatcher():
     connections = ConnectionManager()
     service = GameService(ApplicationMessageBus())
-    dispatcher = MessageDispatcher(service, connections, game_id_factory=lambda: "g1")
+    auth = AuthService(InMemoryUserRepository(), _FakeHasher())
+    dispatcher = MessageDispatcher(service, connections, auth, game_id_factory=lambda: "g1")
     return dispatcher, service, connections
 
 
+def _identify(dispatcher, connection_id, username, password="pw"):
+    """Register (and so identify) a connection - the usual precondition for
+    joining a room."""
+    return dispatcher.dispatch(
+        connection_id, _inbound("register", {"username": username, "password": password})
+    )
+
+
 def _started():
-    """A dispatcher with two connected players (alice=White, bob=Black) in
-    a live game in room "lobby", plus the outgoing messages the game start
+    """A dispatcher with two authenticated players (alice=White, bob=Black)
+    in a live game in room "lobby", plus the outgoing messages the game start
     produced."""
     dispatcher, service, connections = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
-    dispatcher.dispatch("c2", _inbound("connect", {"username": "bob"}))
+    _identify(dispatcher, "c1", "alice")
+    _identify(dispatcher, "c2", "bob")
     dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
     start_outgoing = dispatcher.dispatch("c2", _inbound("join_room", {"room": "lobby"}))
     return dispatcher, service, connections, start_outgoing
@@ -33,25 +54,68 @@ def _types(outgoing: list[Outgoing]) -> list[str]:
     return [o.message["type"] for o in outgoing]
 
 
-def test_connect_registers_the_username():
+def test_register_creates_and_identifies_the_user():
     dispatcher, _, connections = _dispatcher()
 
-    result = dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+    result = dispatcher.dispatch("c1", _inbound("register", {"username": "alice", "password": "pw"}, message_id="a1"))
 
-    assert result == []
+    assert _types(result) == ["auth_ok"]
+    assert result[0].message["payload"] == {"username": "alice", "rating": 1200}
+    assert result[0].message["correlation_id"] == "a1"
     assert connections.get("c1").username == "alice"
 
 
-def test_connect_without_a_username_is_an_error():
+def test_register_without_credentials_is_an_error():
     dispatcher, _, _ = _dispatcher()
 
-    result = dispatcher.dispatch("c1", _inbound("connect", {}))
+    no_password = dispatcher.dispatch("c1", _inbound("register", {"username": "alice"}))
+    no_username = dispatcher.dispatch("c2", _inbound("register", {"password": "pw"}))
 
-    assert _types(result) == ["error"]
-    assert result[0].message["payload"]["code"] == "MISSING_FIELD"
+    assert no_password[0].message["payload"]["code"] == "MISSING_FIELD"
+    assert no_username[0].message["payload"]["code"] == "MISSING_FIELD"
 
 
-def test_join_before_connect_is_an_error():
+def test_registering_a_taken_username_fails():
+    dispatcher, _, _ = _dispatcher()
+    _identify(dispatcher, "c1", "alice", "secret")
+
+    result = dispatcher.dispatch("c2", _inbound("register", {"username": "alice", "password": "other"}))
+
+    assert _types(result) == ["auth_failed"]
+    assert result[0].message["payload"]["reason"] == "username_taken"
+
+
+def test_login_after_register_succeeds_and_identifies_the_connection():
+    dispatcher, _, connections = _dispatcher()
+    _identify(dispatcher, "c1", "alice", "secret")
+
+    result = dispatcher.dispatch("c2", _inbound("login", {"username": "alice", "password": "secret"}))
+
+    assert _types(result) == ["auth_ok"]
+    assert result[0].message["payload"]["username"] == "alice"
+    assert connections.get("c2").username == "alice"
+
+
+def test_logging_in_an_unknown_user_fails_with_no_such_user():
+    dispatcher, _, _ = _dispatcher()
+
+    result = dispatcher.dispatch("c1", _inbound("login", {"username": "ghost", "password": "x"}))
+
+    assert _types(result) == ["auth_failed"]
+    assert result[0].message["payload"]["reason"] == "no_such_user"
+
+
+def test_logging_in_with_a_wrong_password_fails():
+    dispatcher, _, _ = _dispatcher()
+    _identify(dispatcher, "c1", "alice", "secret")
+
+    result = dispatcher.dispatch("c2", _inbound("login", {"username": "alice", "password": "wrong"}))
+
+    assert _types(result) == ["auth_failed"]
+    assert result[0].message["payload"]["reason"] == "wrong_password"
+
+
+def test_join_before_authenticating_is_an_error():
     dispatcher, _, _ = _dispatcher()
 
     result = dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
@@ -61,7 +125,7 @@ def test_join_before_connect_is_an_error():
 
 def test_join_room_without_a_room_name_is_an_error():
     dispatcher, _, _ = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+    _identify(dispatcher, "c1", "alice")
 
     result = dispatcher.dispatch("c1", _inbound("join_room", {}))
 
@@ -82,8 +146,8 @@ def test_the_room_creator_plays_white_and_the_second_joiner_starts_the_game():
 
 def test_players_in_different_rooms_do_not_pair_together():
     dispatcher, service, connections = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
-    dispatcher.dispatch("c2", _inbound("connect", {"username": "bob"}))
+    _identify(dispatcher, "c1", "alice")
+    _identify(dispatcher, "c2", "bob")
 
     first = dispatcher.dispatch("c1", _inbound("join_room", {"room": "alpha"}))
     second = dispatcher.dispatch("c2", _inbound("join_room", {"room": "beta"}))
@@ -99,7 +163,7 @@ def test_players_in_different_rooms_do_not_pair_together():
 
 def test_a_third_joiner_is_seated_as_a_spectator_and_shown_the_game():
     dispatcher, service, connections, _ = _started()
-    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    _identify(dispatcher, "c3", "carol")
 
     result = dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
@@ -112,7 +176,7 @@ def test_a_third_joiner_is_seated_as_a_spectator_and_shown_the_game():
 
 def test_a_spectators_move_is_rejected():
     dispatcher, _, _, _ = _started()
-    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    _identify(dispatcher, "c3", "carol")
     dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
     result = dispatcher.dispatch("c3", _inbound("make_move", {"move": "WPa2a4"}, message_id="s1"))
@@ -124,7 +188,7 @@ def test_a_spectators_move_is_rejected():
 
 def test_a_spectators_jump_is_rejected():
     dispatcher, _, _, _ = _started()
-    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    _identify(dispatcher, "c3", "carol")
     dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
     result = dispatcher.dispatch("c3", _inbound("jump_request", {"cell": "a2"}))
@@ -154,7 +218,7 @@ def test_black_moving_a_white_piece_is_rejected():
 
 def test_make_move_before_joining_a_game_is_an_error():
     dispatcher, _, _ = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "solo"}))
+    _identify(dispatcher, "c1", "solo")
 
     result = dispatcher.dispatch("c1", _inbound("make_move", {"move": "WPa2a4"}))
 
@@ -195,7 +259,7 @@ def test_jump_request_without_a_cell_is_an_error():
 
 def test_jump_request_before_joining_a_game_is_an_error():
     dispatcher, _, _ = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "solo"}))
+    _identify(dispatcher, "c1", "solo")
 
     result = dispatcher.dispatch("c1", _inbound("jump_request", {"cell": "a2"}))
 
@@ -204,7 +268,7 @@ def test_jump_request_before_joining_a_game_is_an_error():
 
 def test_disconnecting_a_player_ends_the_game_for_the_opponent_and_spectators():
     dispatcher, service, connections, _ = _started()
-    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    _identify(dispatcher, "c3", "carol")
     dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
     result = dispatcher.disconnect("c1")  # White abandons
@@ -220,7 +284,7 @@ def test_disconnecting_a_player_ends_the_game_for_the_opponent_and_spectators():
 
 def test_a_spectator_disconnecting_broadcasts_nothing_and_leaves_the_game_running():
     dispatcher, service, connections, _ = _started()
-    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    _identify(dispatcher, "c3", "carol")
     dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
     result = dispatcher.disconnect("c3")
@@ -232,7 +296,7 @@ def test_a_spectator_disconnecting_broadcasts_nothing_and_leaves_the_game_runnin
 
 def test_a_waiting_player_disconnecting_broadcasts_nothing():
     dispatcher, _, connections = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+    _identify(dispatcher, "c1", "alice")
     dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))  # White, still waiting
 
     result = dispatcher.disconnect("c1")
@@ -275,7 +339,7 @@ def test_an_unknown_message_type_is_an_error():
 
 def test_the_same_connection_joining_a_room_twice_still_only_waits():
     dispatcher, service, _ = _dispatcher()
-    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+    _identify(dispatcher, "c1", "alice")
 
     dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
     second = dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))

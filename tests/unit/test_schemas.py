@@ -124,6 +124,22 @@ def test_game_over_reason_can_be_overridden_for_an_abandonment():
     assert schemas.game_over("b", reason="abandoned")["payload"] == {"winner": "b", "reason": "abandoned"}
 
 
+def test_auth_ok_carries_the_username_and_rating_correlated_to_the_request():
+    message = schemas.auth_ok("alice", 1200, correlation_id="a1")
+
+    assert message["type"] == "auth_ok"
+    assert message["payload"] == {"username": "alice", "rating": 1200}
+    assert message["correlation_id"] == "a1"
+
+
+def test_auth_failed_carries_the_reason():
+    message = schemas.auth_failed("wrong_password")
+
+    assert message["type"] == "auth_failed"
+    assert message["payload"] == {"reason": "wrong_password"}
+    assert "correlation_id" not in message
+
+
 def test_game_started_and_error_and_pong():
     assert schemas.game_started("alice", "bob")["payload"] == {"white": "alice", "black": "bob"}
     assert schemas.error("BAD", "nope")["payload"] == {"code": "BAD", "message": "nope"}
