@@ -26,22 +26,23 @@ DEFAULT_SERVER_URI = "ws://localhost:8765"
 HANDSHAKE_POLL_SECONDS = 0.05
 
 
-def main(username: str, uri: str = DEFAULT_SERVER_URI) -> None:
-    """Online entry point: connect to the server as username, wait to be
-    paired into a game, then drive the same interactive window as offline
-    play - but from a NetworkGameAdapter, so the server owns state and time.
-    Blocks during the handshake until an opponent joins and the opening
-    board arrives; the view half is built by the shared
-    app_support.build_game_window."""
-    print(f"Connecting to {uri} as '{username}'...")
+def main(username: str, room: str, uri: str = DEFAULT_SERVER_URI) -> None:
+    """Online entry point: connect to the server as username, join the room
+    named room, wait for the game to start, then drive the same interactive
+    window as offline play - but from a NetworkGameAdapter, so the server
+    owns state and time. The first into a room plays White, the second Black,
+    and anyone after that spectates. Blocks during the handshake until the
+    game starts and the opening board arrives; the view half is built by the
+    shared app_support.build_game_window."""
+    print(f"Connecting to {uri} as '{username}', room '{room}'...")
     connection = WebSocketConnection()
     connection.start(uri)
     connection.send(client_messages.connect(username))
-    connection.send(client_messages.join_game())
-    print("Connected. Waiting for an opponent to join (leave this running)...")
+    connection.send(client_messages.join_room(room))
+    print("Connected. Waiting for the game to start (leave this running)...")
 
     initial_snapshot, player_names = _await_game_start(connection)
-    print("Opponent found - opening the board...")
+    print("Game starting - opening the board...")
 
     board = Board(initial_snapshot.board_width, initial_snapshot.board_height)
     board_mapper = BoardMapper(board)
@@ -71,4 +72,6 @@ def _await_game_start(connection: ServerConnection) -> tuple[GameSnapshot, dict[
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "player")
+    cli_username = sys.argv[1] if len(sys.argv) > 1 else "player"
+    cli_room = sys.argv[2] if len(sys.argv) > 2 else "lobby"
+    main(cli_username, cli_room)

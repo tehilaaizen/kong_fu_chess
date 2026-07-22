@@ -5,8 +5,8 @@ def test_connect_carries_the_username():
     assert client_messages.connect("alice") == {"type": "connect", "payload": {"username": "alice"}}
 
 
-def test_join_game_has_an_empty_payload():
-    assert client_messages.join_game() == {"type": "join_game", "payload": {}}
+def test_join_room_carries_the_room_name():
+    assert client_messages.join_room("lobby") == {"type": "join_room", "payload": {"room": "lobby"}}
 
 
 def test_make_move_carries_the_move_string():

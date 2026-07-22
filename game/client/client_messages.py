@@ -14,9 +14,10 @@ def connect(username: str) -> dict:
     return _envelope("connect", {"username": username})
 
 
-def join_game() -> dict:
-    """Ask to be seated in a game; the server pairs the first two joiners."""
-    return _envelope("join_game", {})
+def join_room(room: str) -> dict:
+    """Join the room named room: its creator plays White, the second joiner
+    plays Black, and everyone after that spectates."""
+    return _envelope("join_room", {"room": room})
 
 
 def make_move(move: str) -> dict:
