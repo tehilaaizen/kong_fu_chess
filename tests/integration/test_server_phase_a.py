@@ -49,16 +49,23 @@ def _messages(outgoing):
 def test_two_players_connect_join_move_and_finish_with_a_king_capture():
     dispatcher, service, broadcasts = _wire()
 
-    # (1) both identify by username, first to join is White, second is Black
+    # (1) both identify by username and join the same room by name; the
+    # first into the room is White, the second is Black
     dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
     dispatcher.dispatch("c2", _inbound("connect", {"username": "bob"}))
-    dispatcher.dispatch("c1", _inbound("join_game"))
-    start = dispatcher.dispatch("c2", _inbound("join_game"))
+    dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
+    start = dispatcher.dispatch("c2", _inbound("join_room", {"room": "lobby"}))
 
     # (2) both receive game_started and an opening state_snapshot (sequence 0)
     start_types = [m["type"] for m in _messages(start)]
     assert start_types == ["game_started", "game_started", "state_snapshot", "state_snapshot"]
     assert _messages(start)[2]["payload"]["sequence"] == 0
+
+    # (2b) a third joiner of the same room is seated as a spectator and shown
+    # the game already in progress
+    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    spectate = dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+    assert [m["type"] for m in _messages(spectate)] == ["game_started", "state_snapshot"]
 
     # (4) Black attempting to move a White piece is rejected, board untouched
     rejected = dispatcher.dispatch("c2", _inbound("make_move", {"move": "WRa1a8"}, message_id="b1"))
@@ -75,14 +82,16 @@ def test_two_players_connect_join_move_and_finish_with_a_king_capture():
     assert _messages(accepted)[0]["correlation_id"] == "w1"
 
     # (6) the accepted move broadcasts motion_started at once; once it
-    # resolves on a tick both clients get the arrival, the corrective
-    # snapshot, game_over naming White the winner, and the mover's cooldown
+    # resolves on a tick everyone in the game - both players and the
+    # spectator - gets the arrival, the corrective snapshot, game_over
+    # naming White the winner, and the mover's cooldown
     service.tick_all(LONG_ENOUGH_MS)
-    types_by_conn = {"c1": [], "c2": []}
+    types_by_conn = {"c1": [], "c2": [], "c3": []}
     for outgoing in broadcasts:
         types_by_conn[outgoing.connection_id].append(outgoing.message["type"])
     expected = ["motion_started", "arrival", "state_snapshot", "game_over", "rest_started"]
     assert types_by_conn["c1"] == expected
     assert types_by_conn["c2"] == expected
+    assert types_by_conn["c3"] == expected  # the spectator sees the whole game unfold
     game_over = next(o for o in broadcasts if o.message["type"] == "game_over")
     assert game_over.message["payload"]["winner"] == "w"

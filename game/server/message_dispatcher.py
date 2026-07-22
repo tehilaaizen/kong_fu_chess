@@ -8,10 +8,13 @@ from application.dto import board_placements
 from application.game_service import GameService
 from server import schemas
 from server.connection_manager import ConnectionManager
+from server.room_registry import ROLE_SPECTATOR, RoomRegistry
 from server.schemas import InboundMessage
 
 WHITE = "w"
 BLACK = "b"
+# Rejection reason sent when a spectator tries to play.
+SPECTATOR = "spectator"
 
 # Standard starting position in this project's board notation - the layout
 # every Phase A quick match begins from.
@@ -44,8 +47,9 @@ class MessageDispatcher:
     messages to send back, calling the application services. Pure and
     synchronous - the async gateway owns the sockets and the event loop;
     this owns none of that, so the whole command vocabulary is unit
-    testable. Phase A pairs the first two connections that ask to play
-    (first = White, second = Black); real matchmaking is a later phase."""
+    testable. Players join by room name (delegated to a RoomRegistry): the
+    first into a room is White, the second is Black and starts the game,
+    and everyone after that is a spectator who watches but cannot play."""
 
     def __init__(
         self,
@@ -53,12 +57,13 @@ class MessageDispatcher:
         connection_manager: ConnectionManager,
         game_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
         start_board: str = STANDARD_START_BOARD,
+        room_registry: RoomRegistry | None = None,
     ) -> None:
         self._game_service = game_service
         self._connections = connection_manager
         self._game_id_factory = game_id_factory
         self._start_board = start_board
-        self._waiting_connection: str | None = None
+        self._rooms = room_registry if room_registry is not None else RoomRegistry()
 
     def dispatch(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Handle one inbound message, returning the direct responses.
@@ -66,7 +71,7 @@ class MessageDispatcher:
         broadcast separately by the Broadcaster, not from here."""
         handlers = {
             "connect": self._connect,
-            "join_game": self._join_game,
+            "join_room": self._join_room,
             "make_move": self._make_move,
             "jump_request": self._jump_request,
             "ping": self._ping,
@@ -84,25 +89,30 @@ class MessageDispatcher:
         self._connections.register(connection_id, username)
         return []
 
-    def _join_game(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
-        """Enter the quick-match queue. The first caller waits; the second
-        is paired with it into a new game (first = White, second = Black),
-        and both are sent game_started plus the opening state_snapshot."""
+    def _join_room(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
+        """Join the room named in the payload. The first connection into a
+        room waits as White; the second starts the game (game_started +
+        opening snapshot to both); anyone after that is seated as a
+        spectator and shown the game already in progress. Re-joining under
+        the same connection keeps the existing seat and sends nothing new."""
         if self._connections.get(connection_id) is None:
             return [Outgoing(connection_id, schemas.error("NOT_CONNECTED", "connect before joining"))]
 
-        if self._waiting_connection is None or self._waiting_connection == connection_id:
-            self._waiting_connection = connection_id
-            return []
+        room = inbound.payload.get("room")
+        if not isinstance(room, str) or not room:
+            return [Outgoing(connection_id, schemas.error("MISSING_FIELD", "join_room requires a room name"))]
 
-        white_id = self._waiting_connection
-        black_id = connection_id
-        self._waiting_connection = None
-        return self._start_game(white_id, black_id)
+        admission = self._rooms.join(connection_id, room)
+        if admission.start_game:
+            return self._start_game(admission.white_id, admission.black_id, room)
+        if admission.role == ROLE_SPECTATOR:
+            return self._seat_spectator(connection_id, admission.game_id)
+        return []  # White creator waiting for an opponent, or an idempotent re-join
 
-    def _start_game(self, white_id: str, black_id: str) -> list[Outgoing]:
-        """Seat two connections as White/Black, create their game, and
-        return the game_started + opening-snapshot messages for both."""
+    def _start_game(self, white_id: str, black_id: str, room: str) -> list[Outgoing]:
+        """Seat two connections as White/Black, create their game, remember
+        it on the room (so later spectators find it), and return the
+        game_started + opening-snapshot messages for both."""
         game_id = self._game_id_factory()
         white_user = self._connections.get(white_id).username
         black_user = self._connections.get(black_id).username
@@ -110,11 +120,9 @@ class MessageDispatcher:
         self._connections.assign_to_game(black_id, game_id, BLACK)
 
         session = self._game_service.create_session(game_id, white_user, black_user, self._start_board)
+        self._rooms.set_game_id(room, game_id)
         started = schemas.game_started(white_user, black_user)
-        opening = session.snapshot()
-        snapshot = schemas.state_snapshot(
-            board_placements(opening), opening.board_width, opening.board_height, sequence=0, game_over=False
-        )
+        snapshot = self._snapshot_message(session)
 
         return [
             Outgoing(white_id, started),
@@ -123,11 +131,34 @@ class MessageDispatcher:
             Outgoing(black_id, snapshot),
         ]
 
+    def _seat_spectator(self, connection_id: str, game_id: str) -> list[Outgoing]:
+        """Seat a spectator in game_id (color None, so they receive
+        broadcasts but the move handlers reject them) and send them
+        game_started plus the current board, so they can render the game
+        already under way."""
+        self._connections.assign_to_game(connection_id, game_id, None)
+        session = self._game_service.session(game_id)
+        white_user, black_user = session.white_user, session.black_user
+        return [
+            Outgoing(connection_id, schemas.game_started(white_user, black_user)),
+            Outgoing(connection_id, self._snapshot_message(session)),
+        ]
+
+    def _snapshot_message(self, session) -> dict:
+        """A state_snapshot of session's current board (sequence 0 - it is a
+        full-state message, not a move delta)."""
+        snapshot = session.snapshot()
+        return schemas.state_snapshot(
+            board_placements(snapshot), snapshot.board_width, snapshot.board_height, sequence=0, game_over=False
+        )
+
     def _make_move(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Apply a "WQe2e5" move on behalf of the connection's color."""
         info = self._connections.get(connection_id)
         if info is None or info.game_id is None:
             return [Outgoing(connection_id, schemas.error("NOT_IN_GAME", "join a game first"))]
+        if info.color is None:
+            return [Outgoing(connection_id, schemas.move_rejected(SPECTATOR, inbound.message_id))]
 
         move = inbound.payload.get("move")
         if not isinstance(move, str):
@@ -143,6 +174,8 @@ class MessageDispatcher:
         info = self._connections.get(connection_id)
         if info is None or info.game_id is None:
             return [Outgoing(connection_id, schemas.error("NOT_IN_GAME", "join a game first"))]
+        if info.color is None:
+            return [Outgoing(connection_id, schemas.move_rejected(SPECTATOR, inbound.message_id))]
 
         cell = inbound.payload.get("cell")
         if not isinstance(cell, str):

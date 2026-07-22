@@ -78,6 +78,16 @@ class GameSession:
         return self._game_id
 
     @property
+    def white_user(self) -> str:
+        """The White player's display identity."""
+        return self._white_user
+
+    @property
+    def black_user(self) -> str:
+        """The Black player's display identity."""
+        return self._black_user
+
+    @property
     def board_height(self) -> int:
         """The board's height in cells - needed to parse algebraic move
         notation against this game."""

@@ -19,12 +19,13 @@ def _dispatcher():
 
 def _started():
     """A dispatcher with two connected players (alice=White, bob=Black) in
-    a live game, plus the outgoing messages the game start produced."""
+    a live game in room "lobby", plus the outgoing messages the game start
+    produced."""
     dispatcher, service, connections = _dispatcher()
     dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
     dispatcher.dispatch("c2", _inbound("connect", {"username": "bob"}))
-    dispatcher.dispatch("c1", _inbound("join_game"))
-    start_outgoing = dispatcher.dispatch("c2", _inbound("join_game"))
+    dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
+    start_outgoing = dispatcher.dispatch("c2", _inbound("join_room", {"room": "lobby"}))
     return dispatcher, service, connections, start_outgoing
 
 
@@ -53,21 +54,83 @@ def test_connect_without_a_username_is_an_error():
 def test_join_before_connect_is_an_error():
     dispatcher, _, _ = _dispatcher()
 
-    result = dispatcher.dispatch("c1", _inbound("join_game"))
+    result = dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
 
     assert result[0].message["payload"]["code"] == "NOT_CONNECTED"
 
 
-def test_the_first_joiner_waits_and_the_second_starts_the_game():
+def test_join_room_without_a_room_name_is_an_error():
+    dispatcher, _, _ = _dispatcher()
+    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+
+    result = dispatcher.dispatch("c1", _inbound("join_room", {}))
+
+    assert result[0].message["payload"]["code"] == "MISSING_FIELD"
+
+
+def test_the_room_creator_plays_white_and_the_second_joiner_starts_the_game():
     dispatcher, service, connections, start_outgoing = _started()
 
-    # first connector is White, second is Black
+    # first into the room is White, second is Black
     assert connections.get("c1").color == "w"
     assert connections.get("c2").color == "b"
     assert service.session("g1") is not None
     # both players get game_started then the opening snapshot
     assert _types(start_outgoing) == ["game_started", "game_started", "state_snapshot", "state_snapshot"]
     assert {o.connection_id for o in start_outgoing} == {"c1", "c2"}
+
+
+def test_players_in_different_rooms_do_not_pair_together():
+    dispatcher, service, connections = _dispatcher()
+    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+    dispatcher.dispatch("c2", _inbound("connect", {"username": "bob"}))
+
+    first = dispatcher.dispatch("c1", _inbound("join_room", {"room": "alpha"}))
+    second = dispatcher.dispatch("c2", _inbound("join_room", {"room": "beta"}))
+
+    # each created their own room and is waiting - no game started, so neither
+    # has been seated yet (color is assigned only when a game begins)
+    assert first == []
+    assert second == []
+    assert connections.get("c1").game_id is None
+    assert connections.get("c2").game_id is None
+    assert service.session("g1") is None
+
+
+def test_a_third_joiner_is_seated_as_a_spectator_and_shown_the_game():
+    dispatcher, service, connections, _ = _started()
+    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+
+    result = dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+
+    # the spectator is seated in the game (color None) and shown it in progress
+    assert connections.get("c3").game_id == "g1"
+    assert connections.get("c3").color is None
+    assert _types(result) == ["game_started", "state_snapshot"]
+    assert {o.connection_id for o in result} == {"c3"}
+
+
+def test_a_spectators_move_is_rejected():
+    dispatcher, _, _, _ = _started()
+    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+
+    result = dispatcher.dispatch("c3", _inbound("make_move", {"move": "WPa2a4"}, message_id="s1"))
+
+    assert _types(result) == ["move_rejected"]
+    assert result[0].message["payload"]["reason"] == "spectator"
+    assert result[0].message["correlation_id"] == "s1"
+
+
+def test_a_spectators_jump_is_rejected():
+    dispatcher, _, _, _ = _started()
+    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+
+    result = dispatcher.dispatch("c3", _inbound("jump_request", {"cell": "a2"}))
+
+    assert _types(result) == ["move_rejected"]
+    assert result[0].message["payload"]["reason"] == "spectator"
 
 
 def test_white_can_make_a_legal_move():
@@ -155,12 +218,12 @@ def test_an_unknown_message_type_is_an_error():
     assert result[0].message["payload"]["code"] == "UNKNOWN_TYPE"
 
 
-def test_the_same_connection_joining_twice_still_only_waits():
+def test_the_same_connection_joining_a_room_twice_still_only_waits():
     dispatcher, service, _ = _dispatcher()
     dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
 
-    dispatcher.dispatch("c1", _inbound("join_game"))
-    second = dispatcher.dispatch("c1", _inbound("join_game"))
+    dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
+    second = dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
 
     assert second == []
     assert service.session("g1") is None
