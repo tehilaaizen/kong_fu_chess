@@ -7,8 +7,10 @@ from typing import Callable
 from application.auth_service import AuthResult, AuthService
 from application.dto import board_placements
 from application.game_service import GameService
+from persistence.repositories import DEFAULT_RATING
 from server import schemas
 from server.connection_manager import ConnectionManager
+from server.matchmaking import MatchmakingService
 from server.room_registry import ROLE_SPECTATOR, RoomRegistry
 from server.schemas import InboundMessage
 
@@ -16,8 +18,6 @@ WHITE = "w"
 BLACK = "b"
 # Rejection reason sent when a spectator tries to play.
 SPECTATOR = "spectator"
-# game_over reason when a player wins because the opponent disconnected.
-ABANDONED = "abandoned"
 
 # Standard starting position in this project's board notation - the layout
 # every Phase A quick match begins from.
@@ -63,6 +63,7 @@ class MessageDispatcher:
         game_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
         start_board: str = STANDARD_START_BOARD,
         room_registry: RoomRegistry | None = None,
+        matchmaking: MatchmakingService | None = None,
     ) -> None:
         self._game_service = game_service
         self._connections = connection_manager
@@ -70,6 +71,7 @@ class MessageDispatcher:
         self._game_id_factory = game_id_factory
         self._start_board = start_board
         self._rooms = room_registry if room_registry is not None else RoomRegistry()
+        self._matchmaking = matchmaking if matchmaking is not None else MatchmakingService()
 
     def dispatch(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Handle one inbound message, returning the direct responses.
@@ -79,6 +81,8 @@ class MessageDispatcher:
             "register": self._register,
             "login": self._login,
             "join_room": self._join_room,
+            "find_match": self._find_match,
+            "cancel_match": self._cancel_match,
             "make_move": self._make_move,
             "jump_request": self._jump_request,
             "ping": self._ping,
@@ -112,7 +116,7 @@ class MessageDispatcher:
         if not result.is_authenticated:
             return [Outgoing(connection_id, schemas.auth_failed(result.reason, inbound.message_id))]
 
-        self._connections.register(connection_id, result.user.username)
+        self._connections.register(connection_id, result.user.username, result.user.rating)
         return [Outgoing(connection_id, schemas.auth_ok(result.user.username, result.user.rating, inbound.message_id))]
 
     def _join_room(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
@@ -136,26 +140,58 @@ class MessageDispatcher:
         return []  # White creator waiting for an opponent, or an idempotent re-join
 
     def _start_game(self, white_id: str, black_id: str, room: str) -> list[Outgoing]:
-        """Seat two connections as White/Black, create their game, remember
-        it on the room (so later spectators find it), and return the
-        game_started + opening-snapshot messages for both."""
+        """Room entry point: seat the two players, then remember the game on
+        the room so later spectators find it."""
+        game_id, outgoing = self._seat_and_start(white_id, black_id)
+        self._rooms.set_game_id(room, game_id)
+        return outgoing
+
+    def _seat_and_start(self, white_id: str, black_id: str) -> tuple[str, list[Outgoing]]:
+        """Seat two connections as White/Black, create their game, and return
+        (game_id, the game_started + opening-snapshot messages for both). The
+        shared core of both entry points - a named room filling up and a
+        matchmaking pairing - so a game starts the same way however it was
+        arranged."""
         game_id = self._game_id_factory()
-        white_user = self._connections.get(white_id).username
-        black_user = self._connections.get(black_id).username
+        white = self._connections.get(white_id)
+        black = self._connections.get(black_id)
         self._connections.assign_to_game(white_id, game_id, WHITE)
         self._connections.assign_to_game(black_id, game_id, BLACK)
 
-        session = self._game_service.create_session(game_id, white_user, black_user, self._start_board)
-        self._rooms.set_game_id(room, game_id)
-        started = schemas.game_started(white_user, black_user)
+        session = self._game_service.create_session(game_id, white.username, black.username, self._start_board)
+        started = schemas.game_started(white.username, black.username, white.rating, black.rating)
         snapshot = self._snapshot_message(session)
 
-        return [
+        return game_id, [
             Outgoing(white_id, started),
             Outgoing(black_id, started),
             Outgoing(white_id, snapshot),
             Outgoing(black_id, snapshot),
         ]
+
+    def _find_match(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
+        """Queue an authenticated connection for an ELO-matched game, or
+        start it at once if a suitable opponent is already waiting. While
+        waiting, nothing is sent back; the game_started arrives when a match
+        is made (or match_timeout if the wait expires)."""
+        if self._connections.get(connection_id) is None:
+            return [Outgoing(connection_id, schemas.error("NOT_CONNECTED", "authenticate before matchmaking"))]
+
+        pairing = self._matchmaking.request_match(connection_id, self._connections.get(connection_id).rating)
+        if pairing is None:
+            return []
+        return self._seat_and_start(pairing.white_id, pairing.black_id)[1]
+
+    def _cancel_match(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
+        """Withdraw a connection from the matchmaking queue (a no-op if it
+        was not waiting)."""
+        self._matchmaking.cancel(connection_id)
+        return []
+
+    def expire_matchmaking(self) -> list[Outgoing]:
+        """Time out any player who has waited too long for a match, telling
+        each their search expired. Driven by the server's periodic tick."""
+        return [Outgoing(cid, schemas.match_timeout()) for cid in self._matchmaking.expire()]
 
     def _seat_spectator(self, connection_id: str, game_id: str) -> list[Outgoing]:
         """Seat a spectator in game_id (color None, so they receive
@@ -164,11 +200,26 @@ class MessageDispatcher:
         already under way."""
         self._connections.assign_to_game(connection_id, game_id, None)
         session = self._game_service.session(game_id)
-        white_user, black_user = session.white_user, session.black_user
+        white_rating, black_rating = self._player_ratings(game_id)
         return [
-            Outgoing(connection_id, schemas.game_started(white_user, black_user)),
+            Outgoing(
+                connection_id,
+                schemas.game_started(session.white_user, session.black_user, white_rating, black_rating),
+            ),
             Outgoing(connection_id, self._snapshot_message(session)),
         ]
+
+    def _player_ratings(self, game_id: str) -> tuple[int, int]:
+        """The (white_rating, black_rating) of the two seated players in
+        game_id, read from their live connections - so a spectator's
+        game_started can label both players. Falls back to the default rating
+        for a color whose player is momentarily missing."""
+        by_color: dict[str, int] = {}
+        for connection_id in self._connections.connections_in_game(game_id):
+            info = self._connections.get(connection_id)
+            if info is not None and info.color in (WHITE, BLACK):
+                by_color[info.color] = info.rating
+        return by_color.get(WHITE, DEFAULT_RATING), by_color.get(BLACK, DEFAULT_RATING)
 
     def _snapshot_message(self, session) -> dict:
         """A state_snapshot of session's current board (sequence 0 - it is a
@@ -218,27 +269,23 @@ class MessageDispatcher:
 
     def disconnect(self, connection_id: str) -> list[Outgoing]:
         """Handle a connection dropping (called by the gateway when a socket
-        closes). If it was a player in a game still in progress, the
-        opponent wins by abandonment: the game is marked over and a
-        game_over (reason "abandoned") is sent to everyone else still in it.
-        A spectator or an unseated/unknown connection leaving produces no
-        broadcast. Always removes the connection from the registry."""
+        closes). If it was a player in a game still in progress, the opponent
+        wins by abandonment: the session is abandoned, which publishes a
+        GameEndedEvent - the Broadcaster turns that into the game_over
+        (reason "abandoned") broadcast and the RatingService updates ELO, the
+        same path a king capture takes. A spectator or an unseated/unknown
+        connection leaving ends nothing. A waiting matchmaking search is
+        also dropped. Always removes the connection."""
         info = self._connections.get(connection_id)
         if info is None:
             return []
 
-        outgoing: list[Outgoing] = []
+        self._matchmaking.cancel(connection_id)  # harmless if it was not queued
         if info.game_id is not None and info.color is not None:
             session = self._game_service.session(info.game_id)
             if session is not None and not session.is_over():
-                session.abandon()
                 winner = BLACK if info.color == WHITE else WHITE
-                message = schemas.game_over(winner, reason=ABANDONED)
-                outgoing = [
-                    Outgoing(cid, message)
-                    for cid in self._connections.connections_in_game(info.game_id)
-                    if cid != connection_id
-                ]
+                session.abandon(winner)
 
         self._connections.remove(connection_id)
-        return outgoing
+        return []

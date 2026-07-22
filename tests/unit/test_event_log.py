@@ -73,7 +73,7 @@ def test_an_arrival_with_a_capture_names_the_captured_kind():
 def test_a_game_end_is_logged_with_the_winner():
     log, lines = _log()
 
-    log.handle(GameEndedEvent(game_id="g1", winner="w"))
+    log.handle(GameEndedEvent(game_id="g1", winner="w", white_user="alice", black_user="bob"))
 
     assert lines == ["game g1 ended - winner=w"]
 

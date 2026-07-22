@@ -25,6 +25,17 @@ def join_room(room: str) -> dict:
     return _envelope("join_room", {"room": room})
 
 
+def find_match() -> dict:
+    """Ask the server to pair us with a waiting player of similar ELO. The
+    game begins (game_started) once a match is found, just like a room."""
+    return _envelope("find_match", {})
+
+
+def cancel_match() -> dict:
+    """Withdraw from the matchmaking queue."""
+    return _envelope("cancel_match", {})
+
+
 def make_move(move: str) -> dict:
     """Request a move in "WRa1a7" wire notation."""
     return _envelope("make_move", {"move": move})

@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from persistence.repositories import DEFAULT_RATING
+
 
 @dataclass
 class ConnectionInfo:
     """What the server tracks about one live connection: its id, the
-    username it identified as, and (once it joins a game) which game and
-    color it plays. color is None for a spectator or a not-yet-seated
-    connection."""
+    username it identified as, its ELO rating at login (so a game_started can
+    label both players), and (once it joins a game) which game and color it
+    plays. color is None for a spectator or a not-yet-seated connection."""
 
     connection_id: str
     username: str
+    rating: int = DEFAULT_RATING
     game_id: str | None = None
     color: str | None = None
 
@@ -25,10 +28,10 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._by_id: dict[str, ConnectionInfo] = {}
 
-    def register(self, connection_id: str, username: str) -> ConnectionInfo:
-        """Record a newly connected, identified client. Returns its
-        ConnectionInfo."""
-        info = ConnectionInfo(connection_id=connection_id, username=username)
+    def register(self, connection_id: str, username: str, rating: int = DEFAULT_RATING) -> ConnectionInfo:
+        """Record a newly connected, identified client with its login-time
+        rating. Returns its ConnectionInfo."""
+        info = ConnectionInfo(connection_id=connection_id, username=username, rating=rating)
         self._by_id[connection_id] = info
         return info
 

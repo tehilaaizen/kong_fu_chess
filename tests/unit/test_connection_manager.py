@@ -12,6 +12,15 @@ def test_register_records_a_connection_with_its_username():
     assert manager.get("c1") is info
 
 
+def test_register_stores_the_login_rating():
+    manager = ConnectionManager()
+
+    info = manager.register("c1", "alice", 1450)
+
+    assert info.rating == 1450
+    assert manager.get("c1").rating == 1450
+
+
 def test_get_unknown_connection_is_none():
     assert ConnectionManager().get("nope") is None
 

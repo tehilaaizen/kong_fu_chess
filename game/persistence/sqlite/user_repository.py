@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from persistence.repositories import DEFAULT_RATING, UserExists, UserRecord
+from persistence.repositories import DEFAULT_RATING, RatingUpdate, UserExists, UserRecord
 
 _SCHEMA = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
 
@@ -47,3 +47,24 @@ class SqliteUserRepository:
         if row is None:
             return None
         return UserRecord(username=row[0], password_hash=row[1], rating=row[2])
+
+    def record_game_result(self, game_id: str, updates: list[RatingUpdate]) -> bool:
+        """Insert one rating_changes row per player and update their rating,
+        all in one transaction. A duplicate (game_id, username) violates the
+        primary key, rolling the whole transaction back and returning False -
+        so recording the same game twice is a no-op."""
+        try:
+            with self._connection:  # commits on success, rolls back on IntegrityError
+                for update in updates:
+                    self._connection.execute(
+                        "INSERT INTO rating_changes (game_id, username, old_rating, new_rating) "
+                        "VALUES (?, ?, ?, ?)",
+                        (game_id, update.username, update.old_rating, update.new_rating),
+                    )
+                    self._connection.execute(
+                        "UPDATE users SET rating = ? WHERE username = ?",
+                        (update.new_rating, update.username),
+                    )
+        except sqlite3.IntegrityError:
+            return False
+        return True

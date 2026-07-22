@@ -8,6 +8,7 @@ import os
 from application.auth_service import AuthService
 from application.game_service import GameService
 from application.password_hasher import PasswordHasher
+from application.rating_service import RatingService
 from messaging.application_message_bus import ApplicationMessageBus
 from persistence.sqlite.user_repository import SqliteUserRepository, connect
 from server.broadcaster import Broadcaster
@@ -27,18 +28,24 @@ def build_server(log_emit: Emit | None = None, db_path: str = DEFAULT_DB_PATH) -
     that publishes on it, the connection registry, a SQLite-backed
     AuthService, the dispatcher, and the GameServer - then wire a
     Broadcaster's sink to the server's send queue and subscribe it to the
-    bus. When log_emit is given, an EventLog is also subscribed so every
-    game event is logged through it. Returned unstarted so a smoke test can
-    drive the pieces without opening a socket."""
+    bus. A RatingService (sharing the AuthService's repository) is also
+    subscribed, so every game's end updates the two players' ELO. When
+    log_emit is given, an EventLog is also subscribed so every game event is
+    logged through it. Returned unstarted so a smoke test can drive the
+    pieces without opening a socket."""
     bus = ApplicationMessageBus()
     game_service = GameService(bus)
     connections = ConnectionManager()
-    auth_service = AuthService(SqliteUserRepository(connect(db_path)), PasswordHasher())
+    user_repository = SqliteUserRepository(connect(db_path))
+    auth_service = AuthService(user_repository, PasswordHasher())
     dispatcher = MessageDispatcher(game_service, connections, auth_service)
     server = GameServer(game_service, connections, dispatcher)
 
     broadcaster = Broadcaster(game_service, connections, server.enqueue)
     bus.subscribe(broadcaster.handle)
+    # The RatingService shares the AuthService's repository so an updated ELO
+    # is what the next login reads back in auth_ok.
+    bus.subscribe(RatingService(user_repository).handle)
     if log_emit is not None:
         bus.subscribe(EventLog(log_emit).handle)
     return server

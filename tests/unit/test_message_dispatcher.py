@@ -4,6 +4,7 @@ from application.game_session import NOT_YOUR_PIECE
 from messaging.application_message_bus import ApplicationMessageBus
 from persistence.in_memory.user_repository import InMemoryUserRepository
 from server.connection_manager import ConnectionManager
+from server.matchmaking import MatchmakingService
 from server.message_dispatcher import MessageDispatcher, Outgoing
 from server.schemas import InboundMessage
 
@@ -144,6 +145,33 @@ def test_the_room_creator_plays_white_and_the_second_joiner_starts_the_game():
     assert {o.connection_id for o in start_outgoing} == {"c1", "c2"}
 
 
+def test_game_started_carries_both_players_names_and_ratings():
+    _, _, _, start_outgoing = _started()
+
+    started = next(o for o in start_outgoing if o.message["type"] == "game_started")
+    assert started.message["payload"] == {
+        "white": "alice",
+        "black": "bob",
+        "white_rating": 1200,
+        "black_rating": 1200,
+    }
+
+
+def test_a_spectator_is_shown_both_players_ratings():
+    dispatcher, _, _, _ = _started()
+    _identify(dispatcher, "c3", "carol")
+
+    result = dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+
+    started = next(o for o in result if o.message["type"] == "game_started")
+    assert started.message["payload"] == {
+        "white": "alice",
+        "black": "bob",
+        "white_rating": 1200,
+        "black_rating": 1200,
+    }
+
+
 def test_players_in_different_rooms_do_not_pair_together():
     dispatcher, service, connections = _dispatcher()
     _identify(dispatcher, "c1", "alice")
@@ -266,18 +294,18 @@ def test_jump_request_before_joining_a_game_is_an_error():
     assert result[0].message["payload"]["code"] == "NOT_IN_GAME"
 
 
-def test_disconnecting_a_player_ends_the_game_for_the_opponent_and_spectators():
+def test_disconnecting_a_player_abandons_the_game_and_removes_the_connection():
     dispatcher, service, connections, _ = _started()
     _identify(dispatcher, "c3", "carol")
     dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
     result = dispatcher.disconnect("c1")  # White abandons
 
-    # everyone else in the game is told, and Black is named the winner
-    assert {o.connection_id for o in result} == {"c2", "c3"}
-    assert all(o.message["type"] == "game_over" for o in result)
-    assert result[0].message["payload"] == {"winner": "b", "reason": "abandoned"}
-    # the game is marked over and the connection is gone
+    # the dispatcher no longer broadcasts here - abandon() publishes a
+    # GameEndedEvent and the Broadcaster turns it into the game_over
+    # (covered in test_broadcaster). The dispatcher only ends the game and
+    # drops the connection.
+    assert result == []
     assert service.session("g1").is_over() is True
     assert connections.get("c1") is None
 
@@ -307,7 +335,7 @@ def test_a_waiting_player_disconnecting_broadcasts_nothing():
 
 def test_disconnecting_a_player_after_the_game_already_ended_broadcasts_nothing():
     dispatcher, service, connections, _ = _started()
-    service.session("g1").abandon()  # already over
+    service.session("g1").abandon("b")  # already over
 
     result = dispatcher.disconnect("c1")
 
@@ -319,6 +347,84 @@ def test_disconnecting_an_unknown_connection_is_a_noop():
     dispatcher, _, _ = _dispatcher()
 
     assert dispatcher.disconnect("ghost") == []
+
+
+class _Clock:
+    """A hand-driven clock for matchmaking timeout tests."""
+
+    def __init__(self) -> None:
+        self.now = 0
+
+    def __call__(self) -> int:
+        return self.now
+
+
+def _matchmaking_dispatcher(clock=None):
+    """A dispatcher whose matchmaking uses an injected clock, with two
+    authenticated players (alice, bob) not yet in any game."""
+    connections = ConnectionManager()
+    service = GameService(ApplicationMessageBus())
+    auth = AuthService(InMemoryUserRepository(), _FakeHasher())
+    matchmaking = MatchmakingService(now_ms=clock or _Clock())
+    dispatcher = MessageDispatcher(
+        service, connections, auth, game_id_factory=lambda: "g1", matchmaking=matchmaking
+    )
+    _identify(dispatcher, "c1", "alice")
+    _identify(dispatcher, "c2", "bob")
+    return dispatcher, service, connections
+
+
+def test_find_match_queues_the_first_player_and_pairs_the_second():
+    dispatcher, service, connections = _matchmaking_dispatcher()
+
+    first = dispatcher.dispatch("c1", _inbound("find_match"))
+    second = dispatcher.dispatch("c2", _inbound("find_match"))
+
+    assert first == []  # nobody to match yet - waiting
+    assert _types(second) == ["game_started", "game_started", "state_snapshot", "state_snapshot"]
+    assert connections.get("c1").color == "w"  # first waiter is White
+    assert connections.get("c2").color == "b"
+    assert service.session("g1") is not None
+
+
+def test_find_match_before_authenticating_is_an_error():
+    dispatcher, _, _ = _dispatcher()
+
+    result = dispatcher.dispatch("ghost", _inbound("find_match"))
+
+    assert result[0].message["payload"]["code"] == "NOT_CONNECTED"
+
+
+def test_cancelling_a_search_takes_the_player_out_of_the_queue():
+    dispatcher, _, _ = _matchmaking_dispatcher()
+    dispatcher.dispatch("c1", _inbound("find_match"))
+
+    assert dispatcher.dispatch("c1", _inbound("cancel_match")) == []
+    # with c1 gone from the queue, c2's search finds nobody and waits
+    assert dispatcher.dispatch("c2", _inbound("find_match")) == []
+
+
+def test_expire_matchmaking_times_out_a_long_waiting_player():
+    clock = _Clock()
+    dispatcher, _, _ = _matchmaking_dispatcher(clock)
+    dispatcher.dispatch("c1", _inbound("find_match"))
+
+    clock.now = 60_000  # past the timeout window
+    timed_out = dispatcher.expire_matchmaking()
+
+    assert [o.connection_id for o in timed_out] == ["c1"]
+    assert timed_out[0].message["type"] == "match_timeout"
+
+
+def test_disconnecting_a_waiting_matchmaker_drops_them_from_the_queue():
+    dispatcher, _, _ = _matchmaking_dispatcher()
+    dispatcher.dispatch("c1", _inbound("find_match"))
+
+    dispatcher.disconnect("c1")
+
+    # c1 was only in the queue (no game), so nothing is broadcast and c2 now
+    # finds an empty queue
+    assert dispatcher.dispatch("c2", _inbound("find_match")) == []
 
 
 def test_ping_is_answered_with_pong():

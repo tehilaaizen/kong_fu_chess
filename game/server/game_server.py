@@ -90,13 +90,16 @@ class GameServer:
 
     async def _tick_loop(self) -> None:
         """Advance every game's time on a fixed interval so in-flight
-        motions resolve (and broadcast) even without client traffic."""
+        motions resolve (and broadcast) even without client traffic, and
+        time out any matchmaking search that has waited too long."""
         last = self._now_ms()
         while True:
             await asyncio.sleep(TICK_INTERVAL_SECONDS)
             now = self._now_ms()
             self._game_service.tick_all(now - last)
             last = now
+            for outgoing in self._dispatcher.expire_matchmaking():
+                self.enqueue(outgoing)
 
     async def _deliver(self, outgoing: Outgoing) -> None:
         """Send one message to its connection, ignoring a send that fails

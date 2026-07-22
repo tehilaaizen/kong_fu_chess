@@ -133,7 +133,17 @@ def test_capturing_the_king_broadcasts_game_over_with_the_winner():
 
     game_overs = _of_type(sink, "game_over")
     assert {o.connection_id for o in game_overs} == {"c1", "c2"}
-    assert game_overs[0].message["payload"]["winner"] == "w"
+    assert game_overs[0].message["payload"] == {"winner": "w", "reason": "king_capture"}
+
+
+def test_abandoning_a_game_broadcasts_game_over_as_abandoned():
+    service, _, sink = _wired()
+
+    service.session("g1").abandon("b")  # White left, Black wins by abandonment
+
+    game_overs = _of_type(sink, "game_over")
+    assert {o.connection_id for o in game_overs} == {"c1", "c2"}
+    assert game_overs[0].message["payload"] == {"winner": "b", "reason": "abandoned"}
 
 
 def test_an_arrival_for_an_unknown_game_broadcasts_nothing():

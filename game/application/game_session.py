@@ -27,6 +27,10 @@ EMPTY_SOURCE = "empty_source"
 WHITE = "w"
 BLACK = "b"
 
+# Why a game ended, carried on the GameEndedEvent.
+KING_CAPTURE = "king_capture"
+ABANDONED = "abandoned"
+
 
 class Publisher(Protocol):
     """Anything a session can publish application events onto - the real
@@ -132,11 +136,14 @@ class GameSession:
         """Whether this game has already ended (by capture or abandonment)."""
         return self._engine.is_game_over()
 
-    def abandon(self) -> None:
-        """End the game because a player left, with no capture - marks it
-        over so any further move is rejected. The winner is decided by the
-        caller (the opponent), not here."""
+    def abandon(self, winner_color: str) -> None:
+        """End the game because a player left, with no capture: mark it over
+        so any further move is rejected, and publish a GameEndedEvent for
+        winner_color (reason "abandoned") - the single game-over signal the
+        Broadcaster turns into a game_over message and the RatingService
+        counts for ELO, exactly like a king capture."""
         self._engine.mark_game_over()
+        self._publish_game_ended(winner_color, ABANDONED)
 
     def snapshot(self) -> GameSnapshot:
         """The current board state to broadcast to this game's clients."""
@@ -208,7 +215,21 @@ class GameSession:
         """Engine observer hook: a king was captured - publish the winner
         (the other color) as a GameEndedEvent."""
         winner = WHITE if loser_color == BLACK else BLACK
-        self._publisher.publish(GameEndedEvent(game_id=self._game_id, winner=winner))
+        self._publish_game_ended(winner, KING_CAPTURE)
+
+    def _publish_game_ended(self, winner_color: str, reason: str) -> None:
+        """Publish a GameEndedEvent for winner_color, tagged with this game's
+        id, both players' identities, and why it ended - the one place a
+        game-over event is built, for either a capture or an abandonment."""
+        self._publisher.publish(
+            GameEndedEvent(
+                game_id=self._game_id,
+                winner=winner_color,
+                white_user=self._white_user,
+                black_user=self._black_user,
+                reason=reason,
+            )
+        )
 
 
 class _Engine(Protocol):

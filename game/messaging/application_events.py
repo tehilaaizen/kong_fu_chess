@@ -86,8 +86,14 @@ class GameMoveAppliedEvent:
 
 @dataclass(frozen=True)
 class GameEndedEvent:
-    """Published when a king was captured (translated from the engine's
-    on_game_over). winner is the color of the side still standing."""
+    """Published when a game ends. winner is the color of the side still
+    standing; white_user/black_user are the two players' identities (so a
+    consumer like the RatingService can map the winning color to a
+    username); reason is why it ended - "king_capture" for a normal win,
+    "abandoned" when the loser disconnected. Both reasons count for ELO."""
 
     game_id: str
     winner: str
+    white_user: str
+    black_user: str
+    reason: str = "king_capture"

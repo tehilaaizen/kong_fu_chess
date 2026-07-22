@@ -67,7 +67,7 @@ class Broadcaster:
             return self._on_move_applied(event)
 
         if isinstance(event, GameEndedEvent):
-            return self._to_everyone_in(event.game_id, schemas.game_over(event.winner))
+            return self._to_everyone_in(event.game_id, schemas.game_over(event.winner, reason=event.reason))
 
         return []
 

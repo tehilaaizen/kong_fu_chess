@@ -19,6 +19,14 @@ def test_join_room_carries_the_room_name():
     assert client_messages.join_room("lobby") == {"type": "join_room", "payload": {"room": "lobby"}}
 
 
+def test_find_match_has_an_empty_payload():
+    assert client_messages.find_match() == {"type": "find_match", "payload": {}}
+
+
+def test_cancel_match_has_an_empty_payload():
+    assert client_messages.cancel_match() == {"type": "cancel_match", "payload": {}}
+
+
 def test_make_move_carries_the_move_string():
     assert client_messages.make_move("WRa1a7") == {"type": "make_move", "payload": {"move": "WRa1a7"}}
 

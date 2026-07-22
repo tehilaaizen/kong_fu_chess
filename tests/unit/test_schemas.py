@@ -141,7 +141,12 @@ def test_auth_failed_carries_the_reason():
 
 
 def test_game_started_and_error_and_pong():
-    assert schemas.game_started("alice", "bob")["payload"] == {"white": "alice", "black": "bob"}
+    assert schemas.game_started("alice", "bob", 1200, 1300)["payload"] == {
+        "white": "alice",
+        "black": "bob",
+        "white_rating": 1200,
+        "black_rating": 1300,
+    }
     assert schemas.error("BAD", "nope")["payload"] == {"code": "BAD", "message": "nope"}
     assert schemas.pong()["type"] == "pong"
 

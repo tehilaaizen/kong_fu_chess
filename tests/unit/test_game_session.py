@@ -171,7 +171,9 @@ def test_capturing_the_king_publishes_a_capture_and_game_ended():
     applied = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
     ended = [e for e in publisher.events if isinstance(e, GameEndedEvent)]
     assert applied[0].captured_kind == "K"
-    assert ended == [GameEndedEvent(game_id="g1", winner="w")]
+    assert ended == [
+        GameEndedEvent(game_id="g1", winner="w", white_user="alice", black_user="bob", reason="king_capture")
+    ]
 
 
 def test_jumping_your_own_piece_is_accepted():
@@ -209,9 +211,21 @@ def test_a_new_game_is_not_over():
 def test_abandon_marks_the_game_over():
     session = _session(RecordingPublisher())
 
-    session.abandon()
+    session.abandon("b")
 
     assert session.is_over() is True
+
+
+def test_abandon_publishes_a_game_ended_for_the_winner():
+    publisher = RecordingPublisher()
+    session = _session(publisher)
+
+    session.abandon("b")  # White left, so Black wins by abandonment
+
+    ended = [e for e in publisher.events if isinstance(e, GameEndedEvent)]
+    assert ended == [
+        GameEndedEvent(game_id="g1", winner="b", white_user="alice", black_user="bob", reason="abandoned")
+    ]
 
 
 def test_snapshot_reports_the_current_board():

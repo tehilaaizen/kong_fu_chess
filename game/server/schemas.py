@@ -158,15 +158,32 @@ def auth_failed(reason: str, correlation_id: str | None = None) -> dict:
     return _envelope("auth_failed", {"reason": reason}, correlation_id)
 
 
-def game_started(white_user: str, black_user: str) -> dict:
-    """Broadcast when a game begins (drives start animation/sound)."""
-    return _envelope("game_started", {"white": white_user, "black": black_user})
+def game_started(white_user: str, black_user: str, white_rating: int, black_rating: int) -> dict:
+    """Broadcast when a game begins (drives start animation/sound). Carries
+    each player's name and current ELO rating, so a client can label the HUD
+    with both."""
+    return _envelope(
+        "game_started",
+        {
+            "white": white_user,
+            "black": black_user,
+            "white_rating": white_rating,
+            "black_rating": black_rating,
+        },
+    )
 
 
 def game_over(winner: str, reason: str = "king_capture") -> dict:
     """Broadcast when a game ends. reason is why - "king_capture" for a
     normal win, "abandoned" when the loser disconnected."""
     return _envelope("game_over", {"winner": winner, "reason": reason})
+
+
+def match_timeout() -> dict:
+    """Sent to a player whose matchmaking search timed out without finding an
+    opponent close enough in rating. The connection stays open, so they can
+    search again."""
+    return _envelope("match_timeout", {})
 
 
 def error(code: str, message: str, correlation_id: str | None = None) -> dict:
