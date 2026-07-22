@@ -17,6 +17,7 @@ class FakeConnection:
     def __init__(self, inbound=None) -> None:
         self.sent: list = []
         self._inbound = list(inbound or [])
+        self.closed = False
 
     def send(self, message) -> None:
         self.sent.append(message)
@@ -24,6 +25,9 @@ class FakeConnection:
     def poll(self) -> list:
         drained, self._inbound = self._inbound, []
         return drained
+
+    def is_closed(self) -> bool:
+        return self.closed
 
 
 class SpyObserver:
@@ -170,3 +174,13 @@ def test_selected_cell_reflects_the_controller_selection():
 
     assert adapter.selected_cell == Position(7, 0)
     assert controller.selected_cell == Position(7, 0)
+
+
+def test_connection_lost_reflects_the_underlying_connection_state():
+    adapter, connection, _, _ = _adapter()
+
+    assert adapter.connection_lost() is False
+
+    connection.closed = True
+
+    assert adapter.connection_lost() is True

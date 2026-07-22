@@ -67,6 +67,7 @@ def _window(extractor=None, client=None, resizer=None):
         player_panel_renderer=None,
         game_over_renderer=None,
         game_over_data=None,
+        connection_lost_renderer=None,
         resizer=resizer or _FakeResizer(),
     )
 

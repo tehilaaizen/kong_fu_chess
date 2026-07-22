@@ -128,3 +128,8 @@ class NetworkGameAdapter:
     def selected_cell(self) -> Position | None:
         """The Controller's currently selected cell."""
         return self._controller.selected_cell
+
+    def connection_lost(self) -> bool:
+        """Whether the link to the server has dropped - the window shows a
+        banner and stops trusting the (now frozen) board."""
+        return self._connection.is_closed()

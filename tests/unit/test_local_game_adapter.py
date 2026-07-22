@@ -91,3 +91,9 @@ def test_send_routes_a_jump_command_to_the_controller():
     adapter.send(JumpCommand(30, 40))
 
     assert controller.jumps == [(30, 40)]
+
+
+def test_connection_is_never_lost_for_local_play():
+    adapter, _, _ = _adapter()
+
+    assert adapter.connection_lost() is False

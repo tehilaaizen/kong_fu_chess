@@ -62,3 +62,7 @@ class LocalGameAdapter:
     def selected_cell(self) -> Position | None:
         """The Controller's currently selected cell."""
         return self._controller.selected_cell
+
+    def connection_lost(self) -> bool:
+        """Never lost: local play has no network to drop."""
+        return False

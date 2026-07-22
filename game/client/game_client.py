@@ -39,3 +39,10 @@ class GameClient(Protocol):
     def selected_cell(self) -> Position | None:
         """The currently selected cell, or None."""
         ...
+
+    def connection_lost(self) -> bool:
+        """Whether the game can no longer be reached: always False for local
+        play, True once a network client's link to the server has dropped.
+        The window uses it to show a "connection lost" banner instead of a
+        frozen board."""
+        ...

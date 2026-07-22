@@ -20,3 +20,7 @@ class ServerConnection(Protocol):
         """Every server message received since the last poll, in order;
         empty if none. Never blocks."""
         ...
+
+    def is_closed(self) -> bool:
+        """Whether the link has failed to open or has since dropped."""
+        ...

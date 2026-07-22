@@ -9,6 +9,7 @@ from view.animation.piece_animator_registry import PieceAnimatorRegistry
 from view.board.board_renderer import BoardRenderer
 from view.board.highlight_renderer import HighlightRenderer
 from view.board.rest_overlay_renderer import RestOverlayRenderer
+from view.connection_lost_renderer import ConnectionLostRenderer
 from view.frame_clock import FrameClock
 from view.game_over.game_over_data import GameOverData
 from view.game_over.game_over_renderer import GameOverRenderer
@@ -56,6 +57,7 @@ class GameWindow:
         player_panel_renderer: PlayerPanelRenderer,
         game_over_renderer: GameOverRenderer,
         game_over_data: GameOverData,
+        connection_lost_renderer: ConnectionLostRenderer,
         resizer: WindowResizer,
         window_name: str = DEFAULT_WINDOW_NAME,
     ) -> None:
@@ -74,6 +76,7 @@ class GameWindow:
         self._player_panel_renderer = player_panel_renderer
         self._game_over_renderer = game_over_renderer
         self._game_over_data = game_over_data
+        self._connection_lost_renderer = connection_lost_renderer
         self._resizer = resizer
         self._window_name = window_name
         self._committed_width, self._committed_height = resizer.current_window_size()
@@ -164,6 +167,7 @@ class GameWindow:
             self._score_renderer.render(canvas, self._score_data)
             self._moves_log_renderer.render(canvas, self._moves_log_data)
             self._game_over_renderer.render(canvas, self._game_over_data)
+            self._connection_lost_renderer.render(canvas, self._client.connection_lost())
             canvas.show_frame(self._window_name)
 
             if cv2.waitKey(FRAME_DELAY_MS) & 0xFF in QUIT_KEYS:

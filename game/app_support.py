@@ -11,6 +11,7 @@ from view.board.board_loader import BoardLoader
 from view.board.board_renderer import BoardRenderer
 from view.board.highlight_renderer import HighlightRenderer
 from view.board.rest_overlay_renderer import RestOverlayRenderer
+from view.connection_lost_renderer import ConnectionLostRenderer
 from view.consts import DEFAULT_PLAYER_NAME_BY_COLOR
 from view.frame_clock import FrameClock
 from view.game_over.game_over_data import GameOverData
@@ -74,5 +75,6 @@ def build_game_window(
         player_panel_renderer=PlayerPanelRenderer(geometry, player_name_by_color),
         game_over_renderer=GameOverRenderer(geometry),
         game_over_data=game_over_data,
+        connection_lost_renderer=ConnectionLostRenderer(geometry),
         resizer=resizer,
     )

@@ -56,3 +56,13 @@ GAME_OVER_OVERLAY_ALPHA = 0.6
 GAME_OVER_TEXT_COLOR = (255, 255, 255, 255)  # white
 GAME_OVER_FONT_SIZE = 3.0
 GAME_OVER_FONT_THICKNESS = 6
+
+# The "connection lost" banner shown online when the link to the server
+# drops mid-game (view/connection_lost_renderer.py). Reuses the game-over
+# banner's dimmed-wash + centered-text look, tinted red to read as an error.
+CONNECTION_LOST_TEXT = "CONNECTION LOST"
+CONNECTION_LOST_OVERLAY_COLOR = (0, 0, 0)  # black wash
+CONNECTION_LOST_OVERLAY_ALPHA = 0.7
+CONNECTION_LOST_TEXT_COLOR = (60, 60, 255, 255)  # red (BGRA)
+CONNECTION_LOST_FONT_SIZE = 2.2
+CONNECTION_LOST_FONT_THICKNESS = 5
