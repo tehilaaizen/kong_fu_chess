@@ -10,6 +10,8 @@ from text_io.move_notation import InvalidMoveNotation, MoveNotation
 
 NO_SUCH_GAME = "no_such_game"
 INVALID_NOTATION = "invalid_notation"
+# Rejection reason while a game is frozen waiting for a player to reconnect.
+PAUSED = "paused"
 
 
 class GameService:
@@ -24,6 +26,7 @@ class GameService:
         its own GameStartedEvent)."""
         self._publisher = publisher
         self._sessions: dict[str, GameSession] = {}
+        self._paused: set[str] = set()
 
     def create_session(self, game_id: str, white_user: str, black_user: str, board_text: str) -> GameSession:
         """Build a fresh game from board_text (this project's board
@@ -44,6 +47,8 @@ class GameService:
         session = self._sessions.get(game_id)
         if session is None:
             return MoveResult(False, NO_SUCH_GAME)
+        if self.is_paused(game_id):
+            return MoveResult(False, PAUSED)
 
         try:
             parsed = MoveNotation.parse(move, session.board_height)
@@ -58,6 +63,8 @@ class GameService:
         session = self._sessions.get(game_id)
         if session is None:
             return MoveResult(False, NO_SUCH_GAME)
+        if self.is_paused(game_id):
+            return MoveResult(False, PAUSED)
 
         try:
             position = MoveNotation.parse_cell(cell, session.board_height)
@@ -76,9 +83,24 @@ class GameService:
     def tick_all(self, elapsed_ms: int) -> None:
         """Advance every live game's time by elapsed_ms - the server's
         periodic tick, so in-flight motions resolve into arrivals (and
-        broadcasts) even when no client is sending commands."""
-        for session in list(self._sessions.values()):
-            session.tick(elapsed_ms)
+        broadcasts) even when no client is sending commands. A paused game
+        (a player is mid-reconnect) is frozen: its time does not advance."""
+        for game_id, session in list(self._sessions.items()):
+            if game_id not in self._paused:
+                session.tick(elapsed_ms)
+
+    def pause(self, game_id: str) -> None:
+        """Freeze game_id's time and reject its moves, while a player who
+        left is within their reconnect window."""
+        self._paused.add(game_id)
+
+    def resume(self, game_id: str) -> None:
+        """Unfreeze game_id (the player reconnected, or the game ended)."""
+        self._paused.discard(game_id)
+
+    def is_paused(self, game_id: str) -> bool:
+        """Whether game_id is currently frozen for a reconnect."""
+        return game_id in self._paused
 
     def session(self, game_id: str) -> GameSession | None:
         """The live session for game_id, or None - used by the state-sync

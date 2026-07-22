@@ -38,4 +38,22 @@ class GameOverRenderer:
             consts.GAME_OVER_TEXT, x, y,
             consts.GAME_OVER_FONT_SIZE, consts.GAME_OVER_TEXT_COLOR, consts.GAME_OVER_FONT_THICKNESS,
         )
+        self._draw_winner(canvas, game_over_data, window_width, y)
         return canvas
+
+    def _draw_winner(self, canvas: Img, game_over_data: GameOverData, window_width: int, banner_y: int) -> None:
+        """Draw a smaller "<name> wins!" line centered below the GAME OVER
+        text, when a winner is known."""
+        winner = game_over_data.winner_label()
+        if winner is None:
+            return
+        line = f"{winner} wins!"
+        text_width, _ = canvas.text_size(
+            line, consts.GAME_OVER_WINNER_FONT_SIZE, consts.GAME_OVER_WINNER_FONT_THICKNESS
+        )
+        x = (window_width - text_width) // 2
+        y = banner_y + consts.GAME_OVER_WINNER_Y_OFFSET_PX
+        canvas.put_text(
+            line, x, y,
+            consts.GAME_OVER_WINNER_FONT_SIZE, consts.GAME_OVER_TEXT_COLOR, consts.GAME_OVER_WINNER_FONT_THICKNESS,
+        )

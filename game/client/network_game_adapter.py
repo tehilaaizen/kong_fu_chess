@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from client.reconnect_data import ReconnectData
 from client.server_connection import ServerConnection
-from client.server_event_dispatcher import ServerEventDispatcher
+from client.server_event_dispatcher import GAME_OVER, ServerEventDispatcher
 from engine.game_snapshot import GameSnapshot, PiecePlacement
 from input.commands import Command, LocalCommandSender
 from input.controller import Controller
@@ -11,6 +12,8 @@ from model.position import Position
 from rules.rule_engine import RuleEngine
 
 STATE_SNAPSHOT = "state_snapshot"
+PLAYER_DISCONNECTED = "player_disconnected"
+PLAYER_RECONNECTED = "player_reconnected"
 
 
 def decode_snapshot(payload: dict) -> GameSnapshot:
@@ -74,6 +77,7 @@ class NetworkGameAdapter:
         self._dispatcher = dispatcher
         self._command_sender = LocalCommandSender(controller)
         self._snapshot = initial_snapshot
+        self._reconnect = ReconnectData()
         self._repopulate_board(initial_snapshot)
 
     def snapshot(self) -> GameSnapshot:
@@ -87,17 +91,25 @@ class NetworkGameAdapter:
         client never simulates it. Draining here (on the render thread, the
         only caller) keeps all snapshot/observer state single-threaded; the
         connection's background thread only queues raw messages."""
+        self._reconnect.advance(dt_ms)
         for message in self._connection.poll():
             self._handle(message)
 
     def _handle(self, message: dict) -> None:
-        """Route one server message: a state_snapshot updates the board, any
+        """Route one server message: a state_snapshot updates the board, the
+        reconnect messages drive the "opponent left" overlay/lock, and any
         other type is reconstructed into a view-observer notification."""
         message_type = message["type"]
         payload = message.get("payload", {})
         if message_type == STATE_SNAPSHOT:
             self._apply_state(payload)
+        elif message_type == PLAYER_DISCONNECTED:
+            self._reconnect.opponent_left(payload["name"], payload["seconds"])
+        elif message_type == PLAYER_RECONNECTED:
+            self._reconnect.opponent_returned()
         else:
+            if message_type == GAME_OVER:
+                self._reconnect.opponent_returned()  # the wait is resolved either way
             self._dispatcher.dispatch(message_type, payload)
 
     def _apply_state(self, payload: dict) -> None:
@@ -143,3 +155,9 @@ class NetworkGameAdapter:
         """Whether the link to the server has dropped - the window shows a
         banner and stops trusting the (now frozen) board."""
         return self._connection.is_closed()
+
+    def reconnect_status(self) -> tuple[str, int] | None:
+        """(opponent name, seconds left) while the opponent is disconnected
+        and within their reconnect window - the window shows a countdown
+        overlay and locks input - or None when the game is running."""
+        return self._reconnect.status()

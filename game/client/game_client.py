@@ -46,3 +46,10 @@ class GameClient(Protocol):
         The window uses it to show a "connection lost" banner instead of a
         frozen board."""
         ...
+
+    def reconnect_status(self) -> tuple[str, int] | None:
+        """(opponent name, seconds left) while an opponent has left a network
+        game and is within their reconnect window - the window shows a
+        countdown overlay and locks input - or None otherwise (always None for
+        local play)."""
+        ...

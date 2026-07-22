@@ -17,7 +17,7 @@ from input.controller import Controller
 from model.board import Board
 from rules.rule_engine import RuleEngine
 from view.consts import DEFAULT_PLAYER_NAME_BY_COLOR
-from view.lobby.lobby_flow import run_lobby
+from view.lobby.lobby_flow import await_restore, run_lobby
 from view.lobby.waiting_screen import STARTED
 
 DEFAULT_SERVER_URI = "ws://localhost:8765"
@@ -67,6 +67,12 @@ def main(username: str, password: str, room: str, uri: str = DEFAULT_SERVER_URI,
         print(f"Login failed: {error}.")
         return
     print(f"Logged in as '{username}'.")
+
+    restored = await_restore(connection)
+    if restored is not None:
+        print("Rejoining your game in progress...")
+        _play(connection, restored.snapshot, restored.names)
+        return
 
     if matchmake:
         connection.send(client_messages.find_match())

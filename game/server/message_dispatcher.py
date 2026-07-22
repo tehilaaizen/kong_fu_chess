@@ -10,6 +10,7 @@ from application.game_service import GameService
 from persistence.repositories import DEFAULT_RATING
 from server import schemas
 from server.connection_manager import ConnectionManager
+from server.grace_registry import GraceRegistry
 from server.matchmaking import MatchmakingService
 from server.room_registry import ROLE_SPECTATOR, RoomRegistry
 from server.schemas import InboundMessage
@@ -64,6 +65,7 @@ class MessageDispatcher:
         start_board: str = STANDARD_START_BOARD,
         room_registry: RoomRegistry | None = None,
         matchmaking: MatchmakingService | None = None,
+        grace_registry: GraceRegistry | None = None,
     ) -> None:
         self._game_service = game_service
         self._connections = connection_manager
@@ -72,6 +74,7 @@ class MessageDispatcher:
         self._start_board = start_board
         self._rooms = room_registry if room_registry is not None else RoomRegistry()
         self._matchmaking = matchmaking if matchmaking is not None else MatchmakingService()
+        self._grace = grace_registry if grace_registry is not None else GraceRegistry()
 
     def dispatch(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Handle one inbound message, returning the direct responses.
@@ -117,7 +120,34 @@ class MessageDispatcher:
             return [Outgoing(connection_id, schemas.auth_failed(result.reason, inbound.message_id))]
 
         self._connections.register(connection_id, result.user.username, result.user.rating)
-        return [Outgoing(connection_id, schemas.auth_ok(result.user.username, result.user.rating, inbound.message_id))]
+        outgoing = [Outgoing(connection_id, schemas.auth_ok(result.user.username, result.user.rating, inbound.message_id))]
+        return outgoing + self._restore_if_reconnecting(connection_id, result.user.username)
+
+    def _restore_if_reconnecting(self, connection_id: str, username: str) -> list[Outgoing]:
+        """If username left a game that is still within its reconnect window,
+        put this new connection back in it: re-seat them in their old color,
+        resume the frozen game, replay game_started + the current board to
+        them, and tell the opponent they are back. Nothing if there is no
+        pending reconnect for them (the normal login case)."""
+        entry = self._grace.take(username)
+        if entry is None:
+            return []
+        session = self._game_service.session(entry.game_id)
+        if session is None or session.is_over():
+            return []
+
+        self._connections.assign_to_game(connection_id, entry.game_id, entry.color)
+        self._game_service.resume(entry.game_id)
+        white_rating, black_rating = self._player_ratings(entry.game_id)
+        restored = [
+            Outgoing(connection_id, schemas.game_started(session.white_user, session.black_user, white_rating, black_rating)),
+            Outgoing(connection_id, self._snapshot_message(session)),
+        ]
+        reconnected = schemas.player_reconnected(username)
+        for other in self._connections.connections_in_game(entry.game_id):
+            if other != connection_id:
+                restored.append(Outgoing(other, reconnected))
+        return restored
 
     def _join_room(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Join the room named in the payload. The first connection into a
@@ -269,23 +299,59 @@ class MessageDispatcher:
 
     def disconnect(self, connection_id: str) -> list[Outgoing]:
         """Handle a connection dropping (called by the gateway when a socket
-        closes). If it was a player in a game still in progress, the opponent
-        wins by abandonment: the session is abandoned, which publishes a
-        GameEndedEvent - the Broadcaster turns that into the game_over
-        (reason "abandoned") broadcast and the RatingService updates ELO, the
-        same path a king capture takes. A spectator or an unseated/unknown
-        connection leaving ends nothing. A waiting matchmaking search is
-        also dropped. Always removes the connection."""
+        closes). A player who leaves a game in progress is NOT resigned at
+        once: the game is frozen and they get a reconnect window (they can log
+        back in as the same user to resume). The opponent is told they left,
+        with the countdown. Only if the window closes (expire_grace) does the
+        opponent win. If the other player had already left, both are gone and
+        the game just ends. A spectator/unseated/unknown leaving ends nothing;
+        a waiting matchmaking search is dropped. Always removes the
+        connection."""
         info = self._connections.get(connection_id)
         if info is None:
             return []
 
         self._matchmaking.cancel(connection_id)  # harmless if it was not queued
+        outgoing: list[Outgoing] = []
         if info.game_id is not None and info.color is not None:
             session = self._game_service.session(info.game_id)
             if session is not None and not session.is_over():
-                winner = BLACK if info.color == WHITE else WHITE
-                session.abandon(winner)
+                outgoing = self._start_grace(connection_id, info, session)
 
         self._connections.remove(connection_id)
+        return outgoing
+
+    def _start_grace(self, connection_id: str, info, session) -> list[Outgoing]:
+        """Begin the reconnect window for a player who left game info.game_id,
+        freezing the game and telling the opponent (with the countdown). If
+        the opponent had already left too, end the game quietly instead."""
+        game_id = info.game_id
+        if self._grace.game_is_waiting(game_id):
+            self._grace.discard_game(game_id)
+            self._game_service.resume(game_id)
+            session.terminate()  # both players gone - no winner, no rating change
+            return []
+
+        self._grace.begin(info.username, game_id, info.color)
+        self._game_service.pause(game_id)
+        message = schemas.player_disconnected(info.color, info.username, self._grace.grace_seconds)
+        return [
+            Outgoing(cid, message)
+            for cid in self._connections.connections_in_game(game_id)
+            if cid != connection_id
+        ]
+
+    def expire_grace(self) -> list[Outgoing]:
+        """Resign every player whose reconnect window closed (called on the
+        server's tick): their opponent wins by abandonment - session.abandon
+        publishes a GameEndedEvent, so the Broadcaster sends game_over and the
+        RatingService updates ELO via the bus. The frozen game is unpaused
+        (it is over now). Returns no direct broadcasts; they flow through the
+        bus."""
+        for entry in self._grace.expired():
+            session = self._game_service.session(entry.game_id)
+            if session is not None and not session.is_over():
+                winner = BLACK if entry.color == WHITE else WHITE
+                session.abandon(winner)
+            self._game_service.resume(entry.game_id)
         return []

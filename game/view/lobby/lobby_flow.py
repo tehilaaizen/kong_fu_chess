@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import time
+
 from client import client_messages
 from client.server_connection import ServerConnection
 from view.lobby.home_screen import BACK, MATCHMAKING, HomeScreen
 from view.lobby.login_screen import Authenticate, LoginScreen
 from view.lobby.screen import run_screen
 from view.lobby.waiting_screen import LOST, STARTED, WaitOutcome, WaitingScreen
+
+# After login, how long (and how often) to watch for an auto-restore before
+# giving up and showing the menu. Short - a restore's messages arrive right
+# after auth_ok.
+_RESTORE_WINDOW_SECONDS = 0.8
+_RESTORE_POLL_SECONDS = 0.02
 
 
 def run_lobby(connection: ServerConnection, authenticate: Authenticate) -> WaitOutcome | None:
@@ -22,6 +30,10 @@ def run_lobby(connection: ServerConnection, authenticate: Authenticate) -> WaitO
         if username is None:
             return None
 
+        restored = await_restore(connection)
+        if restored is not None:
+            return restored  # the server put us straight back into a game we left
+
         while True:  # home menu, re-shown after a matchmaking timeout
             choice = run_screen(HomeScreen(username))
             if choice is None:
@@ -36,6 +48,23 @@ def run_lobby(connection: ServerConnection, authenticate: Authenticate) -> WaitO
             if outcome.reason in (STARTED, LOST):
                 return outcome
             # a matchmaking timeout: fall through to re-show the home menu
+
+
+def await_restore(connection: ServerConnection) -> WaitOutcome | None:
+    """Right after login, briefly watch for the server dropping a
+    reconnecting player straight back into the game they left (it sends a
+    game_started + opening snapshot, just like starting a game). Returns the
+    STARTED WaitOutcome if that arrives within the short window, or None for a
+    normal login (then the caller shows the menu). Reuses WaitingScreen's
+    message-consuming; only the timeout loop is here."""
+    screen = WaitingScreen(connection)
+    deadline = time.monotonic() + _RESTORE_WINDOW_SECONDS
+    while time.monotonic() < deadline:
+        outcome = screen.result()
+        if outcome is not None:
+            return outcome if outcome.reason == STARTED else None
+        time.sleep(_RESTORE_POLL_SECONDS)
+    return None
 
 
 def _request_game(connection: ServerConnection, choice) -> str:

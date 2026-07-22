@@ -100,6 +100,8 @@ class GameServer:
             last = now
             for outgoing in self._dispatcher.expire_matchmaking():
                 self.enqueue(outgoing)
+            for outgoing in self._dispatcher.expire_grace():
+                self.enqueue(outgoing)
 
     async def _deliver(self, outgoing: Outgoing) -> None:
         """Send one message to its connection, ignoring a send that fails

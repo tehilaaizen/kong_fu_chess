@@ -10,6 +10,7 @@ from view.board.board_renderer import BoardRenderer
 from view.board.highlight_renderer import HighlightRenderer
 from view.board.rest_overlay_renderer import RestOverlayRenderer
 from view.connection_lost_renderer import ConnectionLostRenderer
+from view.reconnect.reconnect_renderer import ReconnectRenderer
 from view.frame_clock import FrameClock
 from view.game_over.game_over_data import GameOverData
 from view.game_over.game_over_renderer import GameOverRenderer
@@ -58,6 +59,7 @@ class GameWindow:
         game_over_renderer: GameOverRenderer,
         game_over_data: GameOverData,
         connection_lost_renderer: ConnectionLostRenderer,
+        reconnect_renderer: ReconnectRenderer,
         resizer: WindowResizer,
         window_name: str = DEFAULT_WINDOW_NAME,
     ) -> None:
@@ -77,6 +79,7 @@ class GameWindow:
         self._game_over_renderer = game_over_renderer
         self._game_over_data = game_over_data
         self._connection_lost_renderer = connection_lost_renderer
+        self._reconnect_renderer = reconnect_renderer
         self._resizer = resizer
         self._window_name = window_name
         self._committed_width, self._committed_height = resizer.current_window_size()
@@ -86,7 +89,10 @@ class GameWindow:
     def _on_mouse_event(self, event: int, x: int, y: int, flags: int, userdata: object) -> None:
         """Classify a left- or right-button-down event into a Command via
         MouseCommandExtractor, and forward it through CommandSender;
-        ignore every other event and any click outside the board."""
+        ignore every other event and any click outside the board. Input is
+        locked while an opponent is mid-reconnect (the game is frozen)."""
+        if self._client.reconnect_status() is not None:
+            return
         if event == cv2.EVENT_LBUTTONDOWN:
             command = self._extractor.extract_left_click(x, y)
         elif event == cv2.EVENT_RBUTTONDOWN:
@@ -166,6 +172,7 @@ class GameWindow:
             self._player_panel_renderer.render(canvas)
             self._score_renderer.render(canvas, self._score_data)
             self._moves_log_renderer.render(canvas, self._moves_log_data)
+            self._reconnect_renderer.render(canvas, self._client.reconnect_status())
             self._game_over_renderer.render(canvas, self._game_over_data)
             self._connection_lost_renderer.render(canvas, self._client.connection_lost())
             canvas.show_frame(self._window_name)

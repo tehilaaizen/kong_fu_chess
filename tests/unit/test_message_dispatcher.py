@@ -4,6 +4,7 @@ from application.game_session import NOT_YOUR_PIECE
 from messaging.application_message_bus import ApplicationMessageBus
 from persistence.in_memory.user_repository import InMemoryUserRepository
 from server.connection_manager import ConnectionManager
+from server.grace_registry import GraceRegistry
 from server.matchmaking import MatchmakingService
 from server.message_dispatcher import MessageDispatcher, Outgoing
 from server.schemas import InboundMessage
@@ -294,20 +295,90 @@ def test_jump_request_before_joining_a_game_is_an_error():
     assert result[0].message["payload"]["code"] == "NOT_IN_GAME"
 
 
-def test_disconnecting_a_player_abandons_the_game_and_removes_the_connection():
+def test_disconnecting_a_player_freezes_the_game_and_warns_the_opponent():
     dispatcher, service, connections, _ = _started()
     _identify(dispatcher, "c3", "carol")
     dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
 
-    result = dispatcher.disconnect("c1")  # White abandons
+    result = dispatcher.disconnect("c1")  # White leaves - but may come back
 
-    # the dispatcher no longer broadcasts here - abandon() publishes a
-    # GameEndedEvent and the Broadcaster turns it into the game_over
-    # (covered in test_broadcaster). The dispatcher only ends the game and
-    # drops the connection.
-    assert result == []
-    assert service.session("g1").is_over() is True
+    # the opponent and spectator are warned with the countdown; the game is
+    # frozen (not over), so White still has a window to reconnect
+    assert {o.connection_id for o in result} == {"c2", "c3"}
+    assert all(o.message["type"] == "player_disconnected" for o in result)
+    assert result[0].message["payload"] == {"color": "w", "name": "alice", "seconds": 30}
+    assert service.session("g1").is_over() is False
+    assert service.is_paused("g1") is True
     assert connections.get("c1") is None
+
+
+def test_a_move_is_rejected_while_the_game_is_paused_for_a_reconnect():
+    dispatcher, service, _, _ = _started()
+    dispatcher.disconnect("c1")  # White left -> frozen
+
+    result = dispatcher.dispatch("c2", _inbound("make_move", {"move": "BPe7e5"}))
+
+    assert result[0].message["type"] == "move_rejected"
+    assert result[0].message["payload"]["reason"] == "paused"
+
+
+def test_a_reconnecting_player_is_restored_and_the_opponent_is_told():
+    dispatcher, service, connections, _ = _started()
+    dispatcher.disconnect("c1")  # alice (White) leaves
+    assert service.is_paused("g1") is True
+
+    # alice logs back in on a fresh connection within the window
+    result = dispatcher.dispatch("c9", _inbound("login", {"username": "alice", "password": "pw"}))
+
+    to_alice = [o.message["type"] for o in result if o.connection_id == "c9"]
+    to_bob = [o.message["type"] for o in result if o.connection_id == "c2"]
+    assert to_alice == ["auth_ok", "game_started", "state_snapshot"]
+    assert to_bob == ["player_reconnected"]
+    assert service.is_paused("g1") is False  # the game resumes
+    assert connections.get("c9").game_id == "g1"
+    assert connections.get("c9").color == "w"
+
+
+def test_reconnecting_to_a_game_that_already_ended_is_not_restored():
+    dispatcher, service, _, _ = _started()
+    dispatcher.disconnect("c1")  # alice -> grace
+    service.session("g1").terminate()  # the game ends while she is away
+
+    result = dispatcher.dispatch("c9", _inbound("login", {"username": "alice", "password": "pw"}))
+
+    assert [o.message["type"] for o in result] == ["auth_ok"]  # just a plain login, no restore
+
+
+def test_if_both_players_leave_the_game_ends_quietly():
+    dispatcher, service, _, _ = _started()
+    dispatcher.disconnect("c1")  # alice leaves -> frozen, waiting
+
+    result = dispatcher.disconnect("c2")  # bob leaves too
+
+    assert result == []  # nobody left to tell
+    assert service.session("g1").is_over() is True
+    assert service.is_paused("g1") is False
+
+
+def test_when_the_reconnect_window_closes_the_opponent_wins():
+    clock = _Clock()
+    connections = ConnectionManager()
+    service = GameService(ApplicationMessageBus())
+    auth = AuthService(InMemoryUserRepository(), _FakeHasher())
+    dispatcher = MessageDispatcher(
+        service, connections, auth, game_id_factory=lambda: "g1", grace_registry=GraceRegistry(now_ms=clock)
+    )
+    _identify(dispatcher, "c1", "alice")
+    _identify(dispatcher, "c2", "bob")
+    dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))
+    dispatcher.dispatch("c2", _inbound("join_room", {"room": "lobby"}))
+    dispatcher.disconnect("c1")  # alice leaves -> grace
+
+    clock.now = 30_000
+    dispatcher.expire_grace()
+
+    assert service.session("g1").is_over() is True  # bob won by abandonment
+    assert service.is_paused("g1") is False
 
 
 def test_a_spectator_disconnecting_broadcasts_nothing_and_leaves_the_game_running():

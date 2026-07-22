@@ -184,3 +184,50 @@ def test_connection_lost_reflects_the_underlying_connection_state():
     connection.closed = True
 
     assert adapter.connection_lost() is True
+
+
+def _disconnect_msg(name="bob", seconds=30):
+    return {"type": "player_disconnected", "payload": {"color": "b", "name": name, "seconds": seconds}}
+
+
+def test_a_running_game_reports_no_reconnect_wait():
+    adapter, _, _, _ = _adapter()
+
+    assert adapter.reconnect_status() is None
+
+
+def test_an_opponent_leaving_starts_the_countdown():
+    adapter, _, _, _ = _adapter([_disconnect_msg()])
+
+    adapter.advance(0)
+
+    assert adapter.reconnect_status() == ("bob", 30)
+
+
+def test_the_countdown_ticks_down_across_frames():
+    adapter, _, _, _ = _adapter([_disconnect_msg()])
+    adapter.advance(0)  # register the disconnect
+
+    adapter.advance(1000)  # a second of real time passes
+
+    assert adapter.reconnect_status() == ("bob", 29)
+
+
+def test_the_opponent_reconnecting_clears_the_wait():
+    adapter, connection, _, _ = _adapter([_disconnect_msg()])
+    adapter.advance(0)
+
+    connection._inbound = [{"type": "player_reconnected", "payload": {"name": "bob"}}]
+    adapter.advance(0)
+
+    assert adapter.reconnect_status() is None
+
+
+def test_game_over_also_clears_the_reconnect_wait():
+    adapter, connection, _, _ = _adapter([_disconnect_msg()])
+    adapter.advance(0)
+
+    connection._inbound = [{"type": "game_over", "payload": {"winner": "w", "reason": "abandoned"}}]
+    adapter.advance(0)
+
+    assert adapter.reconnect_status() is None

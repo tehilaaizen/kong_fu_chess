@@ -22,6 +22,7 @@ from view.hud.moves_log.moves_log_renderer import MovesLogRenderer
 from view.hud.player_panel.player_panel_renderer import PlayerPanelRenderer
 from view.hud.score.score_data import ScoreData
 from view.hud.score.score_renderer import ScoreRenderer
+from view.reconnect.reconnect_renderer import ReconnectRenderer
 from view.pieces.piece_loader import PieceLoader
 from view.pieces.piece_renderer import PieceRenderer
 from window_resizer import WindowResizer
@@ -56,7 +57,7 @@ def build_game_window(
     client.add_observer(score_data)
     moves_log_data = MovesLogData()
     client.add_observer(moves_log_data)
-    game_over_data = GameOverData()
+    game_over_data = GameOverData(player_name_by_color)
     client.add_observer(game_over_data)
 
     return GameWindow(
@@ -76,5 +77,6 @@ def build_game_window(
         game_over_renderer=GameOverRenderer(geometry),
         game_over_data=game_over_data,
         connection_lost_renderer=ConnectionLostRenderer(geometry),
+        reconnect_renderer=ReconnectRenderer(geometry),
         resizer=resizer,
     )

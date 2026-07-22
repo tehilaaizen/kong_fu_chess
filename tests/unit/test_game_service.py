@@ -1,4 +1,4 @@
-from application.game_service import INVALID_NOTATION, NO_SUCH_GAME, GameService
+from application.game_service import INVALID_NOTATION, NO_SUCH_GAME, PAUSED, GameService
 from application.game_session import NOT_YOUR_PIECE
 from messaging.application_events import GameMoveAppliedEvent, GameStartedEvent
 
@@ -119,3 +119,39 @@ def test_tick_all_advances_every_live_game():
 
     applied = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
     assert {e.game_id for e in applied} == {"g1", "g2"}
+
+
+def test_a_paused_game_rejects_moves_and_jumps():
+    service, _ = _service_with_game()
+
+    service.pause("g1")
+
+    assert service.is_paused("g1") is True
+    assert service.handle_move("g1", "w", "WRa1a7").reason == PAUSED
+    assert service.handle_jump("g1", "w", "a1").reason == PAUSED
+
+
+def test_resuming_a_game_lets_moves_through_again():
+    service, _ = _service_with_game()
+    service.pause("g1")
+
+    service.resume("g1")
+
+    assert service.is_paused("g1") is False
+    assert service.handle_move("g1", "w", "WRa1a7").is_accepted is True
+
+
+def test_tick_all_freezes_a_paused_game_but_not_others():
+    publisher = RecordingPublisher()
+    service = GameService(publisher)
+    service.create_session("g1", "a", "b", BOARD_TEXT)
+    service.create_session("g2", "c", "d", BOARD_TEXT)
+    service.handle_move("g1", "w", "WRa1a7")
+    service.handle_move("g2", "w", "WRa1a7")
+    service.pause("g1")
+
+    service.tick_all(LONG_ENOUGH_MS)
+
+    # g2 resolved its move; g1 stayed frozen (no arrival for it)
+    arrivals = [e for e in publisher.events if isinstance(e, GameMoveAppliedEvent)]
+    assert [e.game_id for e in arrivals] == ["g2"]

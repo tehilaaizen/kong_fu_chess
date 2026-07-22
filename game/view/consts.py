@@ -56,10 +56,27 @@ GAME_OVER_OVERLAY_ALPHA = 0.6
 GAME_OVER_TEXT_COLOR = (255, 255, 255, 255)  # white
 GAME_OVER_FONT_SIZE = 3.0
 GAME_OVER_FONT_THICKNESS = 6
+# A smaller line under GAME OVER naming the winner ("<name> wins!").
+GAME_OVER_WINNER_FONT_SIZE = 1.1
+GAME_OVER_WINNER_FONT_THICKNESS = 2
+GAME_OVER_WINNER_Y_OFFSET_PX = 70  # below the GAME OVER text's baseline
 
 # The "connection lost" banner shown online when the link to the server
 # drops mid-game (view/connection_lost_renderer.py). Reuses the game-over
 # banner's dimmed-wash + centered-text look, tinted red to read as an error.
+# The "opponent left" reconnect overlay shown to the remaining player while
+# a disconnected opponent has time to return (view/reconnect/…). A dimmed
+# wash with a message and a big countdown number; the board is locked
+# meanwhile.
+RECONNECT_OVERLAY_COLOR = (0, 0, 0)  # black wash
+RECONNECT_OVERLAY_ALPHA = 0.65
+RECONNECT_TEXT_COLOR = (235, 235, 235, 255)  # off-white
+RECONNECT_MESSAGE_FONT_SIZE = 1.0
+RECONNECT_MESSAGE_FONT_THICKNESS = 2
+RECONNECT_COUNTDOWN_FONT_SIZE = 4.0
+RECONNECT_COUNTDOWN_FONT_THICKNESS = 8
+RECONNECT_COUNTDOWN_Y_OFFSET_PX = 90  # the number, below the message
+
 CONNECTION_LOST_TEXT = "CONNECTION LOST"
 CONNECTION_LOST_OVERLAY_COLOR = (0, 0, 0)  # black wash
 CONNECTION_LOST_OVERLAY_ALPHA = 0.7

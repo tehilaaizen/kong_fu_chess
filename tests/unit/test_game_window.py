@@ -8,11 +8,15 @@ class _FakeClient:
     """A GameClient whose send() records commands - these tests only
     exercise mouse handling, so the other methods are never called."""
 
-    def __init__(self) -> None:
+    def __init__(self, reconnect_status=None) -> None:
         self.sent: list = []
+        self._reconnect_status = reconnect_status
 
     def send(self, command) -> None:
         self.sent.append(command)
+
+    def reconnect_status(self) -> tuple[str, int] | None:
+        return self._reconnect_status
 
 
 class _FakeExtractor:
@@ -68,6 +72,7 @@ def _window(extractor=None, client=None, resizer=None):
         game_over_renderer=None,
         game_over_data=None,
         connection_lost_renderer=None,
+        reconnect_renderer=None,
         resizer=resizer or _FakeResizer(),
     )
 
@@ -88,6 +93,15 @@ def test_right_button_down_sends_a_jump_command():
     window._on_mouse_event(cv2.EVENT_RBUTTONDOWN, 150, 250, 0, None)
 
     assert client.sent == [JumpCommand(150, 250)]
+
+
+def test_input_is_locked_while_an_opponent_is_reconnecting():
+    client = _FakeClient(reconnect_status=("alice", 12))
+    window = _window(client=client)
+
+    window._on_mouse_event(cv2.EVENT_LBUTTONDOWN, 150, 250, 0, None)
+
+    assert client.sent == []  # the click is ignored while the game is frozen
 
 
 def test_other_mouse_events_are_ignored():

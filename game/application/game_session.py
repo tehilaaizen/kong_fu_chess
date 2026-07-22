@@ -145,6 +145,12 @@ class GameSession:
         self._engine.mark_game_over()
         self._publish_game_ended(winner_color, ABANDONED)
 
+    def terminate(self) -> None:
+        """End the game with no winner and no event - used when both players
+        have left, so there is nobody to award the win to and no rating to
+        change. Just marks it over so it stops accepting moves."""
+        self._engine.mark_game_over()
+
     def snapshot(self) -> GameSnapshot:
         """The current board state to broadcast to this game's clients."""
         return self._engine.snapshot()

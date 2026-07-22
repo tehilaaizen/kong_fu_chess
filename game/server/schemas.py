@@ -179,6 +179,19 @@ def game_over(winner: str, reason: str = "king_capture") -> dict:
     return _envelope("game_over", {"winner": winner, "reason": reason})
 
 
+def player_disconnected(color: str, name: str, seconds: int) -> dict:
+    """Broadcast to the others in a game when a player drops mid-game. They
+    have `seconds` to reconnect before auto-resigning; the board locks and a
+    countdown shows meanwhile. color/name identify who left."""
+    return _envelope("player_disconnected", {"color": color, "name": name, "seconds": seconds})
+
+
+def player_reconnected(name: str) -> dict:
+    """Broadcast when a player returned within their reconnect window - the
+    game resumes."""
+    return _envelope("player_reconnected", {"name": name})
+
+
 def match_timeout() -> dict:
     """Sent to a player whose matchmaking search timed out without finding an
     opponent close enough in rating. The connection stays open, so they can

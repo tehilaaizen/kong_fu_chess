@@ -66,3 +66,7 @@ class LocalGameAdapter:
     def connection_lost(self) -> bool:
         """Never lost: local play has no network to drop."""
         return False
+
+    def reconnect_status(self) -> tuple[str, int] | None:
+        """Never waiting: local play has no opponent that can disconnect."""
+        return None
