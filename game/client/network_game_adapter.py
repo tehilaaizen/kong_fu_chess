@@ -25,6 +25,16 @@ def decode_snapshot(payload: dict) -> GameSnapshot:
     return GameSnapshot(board_width=payload["width"], board_height=payload["height"], pieces=pieces)
 
 
+def player_names_from_started(payload: dict) -> dict[str, str]:
+    """The HUD name labels for a game_started payload, each player's name
+    with their rating - "alice (1216)" - keyed by color. Shared by the CLI
+    entry and the graphical lobby so the label format lives in one place."""
+    return {
+        "w": f"{payload['white']} ({payload['white_rating']})",
+        "b": f"{payload['black']} ({payload['black_rating']})",
+    }
+
+
 class NetworkGameAdapter:
     """A GameClient backed by a remote server - the online mode, mirroring
     LocalGameAdapter. The server owns time and rules, so this adapter never
