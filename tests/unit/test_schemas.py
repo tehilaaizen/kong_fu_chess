@@ -120,6 +120,10 @@ def test_game_over_message_names_the_winner_and_reason():
     assert schemas.game_over("w")["payload"] == {"winner": "w", "reason": "king_capture"}
 
 
+def test_game_over_reason_can_be_overridden_for_an_abandonment():
+    assert schemas.game_over("b", reason="abandoned")["payload"] == {"winner": "b", "reason": "abandoned"}
+
+
 def test_game_started_and_error_and_pong():
     assert schemas.game_started("alice", "bob")["payload"] == {"white": "alice", "black": "bob"}
     assert schemas.error("BAD", "nope")["payload"] == {"code": "BAD", "message": "nope"}

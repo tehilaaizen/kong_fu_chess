@@ -128,6 +128,16 @@ class GameSession:
         on_arrival / on_game_over back into this session."""
         self._engine.wait(elapsed_ms)
 
+    def is_over(self) -> bool:
+        """Whether this game has already ended (by capture or abandonment)."""
+        return self._engine.is_game_over()
+
+    def abandon(self) -> None:
+        """End the game because a player left, with no capture - marks it
+        over so any further move is rejected. The winner is decided by the
+        caller (the opponent), not here."""
+        self._engine.mark_game_over()
+
     def snapshot(self) -> GameSnapshot:
         """The current board state to broadcast to this game's clients."""
         return self._engine.snapshot()
@@ -218,4 +228,10 @@ class _Engine(Protocol):
         ...
 
     def snapshot(self) -> GameSnapshot:
+        ...
+
+    def is_game_over(self) -> bool:
+        ...
+
+    def mark_game_over(self) -> None:
         ...

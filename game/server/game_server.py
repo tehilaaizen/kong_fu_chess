@@ -55,8 +55,9 @@ class GameServer:
 
     async def handle_connection(self, websocket) -> None:
         """Serve one client: assign it a connection id, then read frames,
-        dispatch each, and send the direct responses - cleaning up the
-        connection on disconnect."""
+        dispatch each, and send the direct responses. On disconnect, drop
+        the socket and let the dispatcher clean up - which also tells the
+        opponent if a player abandoned a game in progress."""
         connection_id = uuid.uuid4().hex
         self._sockets[connection_id] = websocket
         try:
@@ -64,7 +65,8 @@ class GameServer:
                 await self._handle_frame(connection_id, raw)
         finally:
             self._sockets.pop(connection_id, None)
-            self._connections.remove(connection_id)
+            for outgoing in self._dispatcher.disconnect(connection_id):
+                await self._deliver(outgoing)
 
     async def _handle_frame(self, connection_id: str, raw: str) -> None:
         """Parse and dispatch one inbound frame, replying with an error on

@@ -200,6 +200,20 @@ def test_jumping_an_opponents_piece_is_rejected():
     assert result.reason == NOT_YOUR_PIECE
 
 
+def test_a_new_game_is_not_over():
+    session = _session(RecordingPublisher())
+
+    assert session.is_over() is False
+
+
+def test_abandon_marks_the_game_over():
+    session = _session(RecordingPublisher())
+
+    session.abandon()
+
+    assert session.is_over() is True
+
+
 def test_snapshot_reports_the_current_board():
     session = _session(RecordingPublisher())
 

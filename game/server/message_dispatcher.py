@@ -15,6 +15,8 @@ WHITE = "w"
 BLACK = "b"
 # Rejection reason sent when a spectator tries to play.
 SPECTATOR = "spectator"
+# game_over reason when a player wins because the opponent disconnected.
+ABANDONED = "abandoned"
 
 # Standard starting position in this project's board notation - the layout
 # every Phase A quick match begins from.
@@ -189,3 +191,30 @@ class MessageDispatcher:
     def _ping(self, connection_id: str, inbound: InboundMessage) -> list[Outgoing]:
         """Liveness."""
         return [Outgoing(connection_id, schemas.pong())]
+
+    def disconnect(self, connection_id: str) -> list[Outgoing]:
+        """Handle a connection dropping (called by the gateway when a socket
+        closes). If it was a player in a game still in progress, the
+        opponent wins by abandonment: the game is marked over and a
+        game_over (reason "abandoned") is sent to everyone else still in it.
+        A spectator or an unseated/unknown connection leaving produces no
+        broadcast. Always removes the connection from the registry."""
+        info = self._connections.get(connection_id)
+        if info is None:
+            return []
+
+        outgoing: list[Outgoing] = []
+        if info.game_id is not None and info.color is not None:
+            session = self._game_service.session(info.game_id)
+            if session is not None and not session.is_over():
+                session.abandon()
+                winner = BLACK if info.color == WHITE else WHITE
+                message = schemas.game_over(winner, reason=ABANDONED)
+                outgoing = [
+                    Outgoing(cid, message)
+                    for cid in self._connections.connections_in_game(info.game_id)
+                    if cid != connection_id
+                ]
+
+        self._connections.remove(connection_id)
+        return outgoing

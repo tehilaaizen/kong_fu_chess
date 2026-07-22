@@ -150,9 +150,10 @@ def game_started(white_user: str, black_user: str) -> dict:
     return _envelope("game_started", {"white": white_user, "black": black_user})
 
 
-def game_over(winner: str) -> dict:
-    """Broadcast when a king was captured."""
-    return _envelope("game_over", {"winner": winner, "reason": "king_capture"})
+def game_over(winner: str, reason: str = "king_capture") -> dict:
+    """Broadcast when a game ends. reason is why - "king_capture" for a
+    normal win, "abandoned" when the loser disconnected."""
+    return _envelope("game_over", {"winner": winner, "reason": reason})
 
 
 def error(code: str, message: str, correlation_id: str | None = None) -> dict:

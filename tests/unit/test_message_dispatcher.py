@@ -202,6 +202,61 @@ def test_jump_request_before_joining_a_game_is_an_error():
     assert result[0].message["payload"]["code"] == "NOT_IN_GAME"
 
 
+def test_disconnecting_a_player_ends_the_game_for_the_opponent_and_spectators():
+    dispatcher, service, connections, _ = _started()
+    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+
+    result = dispatcher.disconnect("c1")  # White abandons
+
+    # everyone else in the game is told, and Black is named the winner
+    assert {o.connection_id for o in result} == {"c2", "c3"}
+    assert all(o.message["type"] == "game_over" for o in result)
+    assert result[0].message["payload"] == {"winner": "b", "reason": "abandoned"}
+    # the game is marked over and the connection is gone
+    assert service.session("g1").is_over() is True
+    assert connections.get("c1") is None
+
+
+def test_a_spectator_disconnecting_broadcasts_nothing_and_leaves_the_game_running():
+    dispatcher, service, connections, _ = _started()
+    dispatcher.dispatch("c3", _inbound("connect", {"username": "carol"}))
+    dispatcher.dispatch("c3", _inbound("join_room", {"room": "lobby"}))
+
+    result = dispatcher.disconnect("c3")
+
+    assert result == []
+    assert connections.get("c3") is None
+    assert service.session("g1").is_over() is False
+
+
+def test_a_waiting_player_disconnecting_broadcasts_nothing():
+    dispatcher, _, connections = _dispatcher()
+    dispatcher.dispatch("c1", _inbound("connect", {"username": "alice"}))
+    dispatcher.dispatch("c1", _inbound("join_room", {"room": "lobby"}))  # White, still waiting
+
+    result = dispatcher.disconnect("c1")
+
+    assert result == []
+    assert connections.get("c1") is None
+
+
+def test_disconnecting_a_player_after_the_game_already_ended_broadcasts_nothing():
+    dispatcher, service, connections, _ = _started()
+    service.session("g1").abandon()  # already over
+
+    result = dispatcher.disconnect("c1")
+
+    assert result == []
+    assert connections.get("c1") is None
+
+
+def test_disconnecting_an_unknown_connection_is_a_noop():
+    dispatcher, _, _ = _dispatcher()
+
+    assert dispatcher.disconnect("ghost") == []
+
+
 def test_ping_is_answered_with_pong():
     dispatcher, _, _ = _dispatcher()
 
