@@ -9,9 +9,14 @@ def _envelope(message_type: str, payload: dict) -> dict:
     return {"type": message_type, "payload": payload}
 
 
-def connect(username: str) -> dict:
-    """Identify to the server by username (Phase A's only identity)."""
-    return _envelope("connect", {"username": username})
+def register(username: str, password: str) -> dict:
+    """Create a new account and identify as it."""
+    return _envelope("register", {"username": username, "password": password})
+
+
+def login(username: str, password: str) -> dict:
+    """Authenticate as an existing account."""
+    return _envelope("login", {"username": username, "password": password})
 
 
 def join_room(room: str) -> dict:

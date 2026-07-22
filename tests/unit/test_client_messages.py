@@ -1,8 +1,18 @@
 from client import client_messages
 
 
-def test_connect_carries_the_username():
-    assert client_messages.connect("alice") == {"type": "connect", "payload": {"username": "alice"}}
+def test_register_carries_the_username_and_password():
+    assert client_messages.register("alice", "secret") == {
+        "type": "register",
+        "payload": {"username": "alice", "password": "secret"},
+    }
+
+
+def test_login_carries_the_username_and_password():
+    assert client_messages.login("alice", "secret") == {
+        "type": "login",
+        "payload": {"username": "alice", "password": "secret"},
+    }
 
 
 def test_join_room_carries_the_room_name():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from application.auth_service import AuthService
 from application.game_service import GameService
@@ -44,10 +45,13 @@ def build_server(log_emit: Emit | None = None, db_path: str = DEFAULT_DB_PATH) -
 
 
 async def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
-    """Configure logging, then build and run the server until interrupted."""
+    """Configure logging, then build and run the server until interrupted.
+    The accounts database path can be overridden via the KFC_DB environment
+    variable (defaults to kong_fu_chess.db)."""
     emit = configure_logging()
-    emit(f"server listening on {host}:{port}")
-    server = build_server(log_emit=emit)
+    db_path = os.environ.get("KFC_DB", DEFAULT_DB_PATH)
+    emit(f"server listening on {host}:{port} (accounts db: {db_path})")
+    server = build_server(log_emit=emit, db_path=db_path)
     await server.serve(host, port)
 
 
