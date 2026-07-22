@@ -63,6 +63,8 @@ class GameServer:
         try:
             async for raw in websocket:
                 await self._handle_frame(connection_id, raw)
+        except websockets.ConnectionClosed:
+            pass  # the client went away (cleanly or abruptly) - a normal end, not an error
         finally:
             self._sockets.pop(connection_id, None)
             for outgoing in self._dispatcher.disconnect(connection_id):

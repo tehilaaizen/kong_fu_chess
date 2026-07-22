@@ -18,6 +18,9 @@ dist/
 .coverage
 htmlcov/
 
+# Server logs
+logs/
+
 # Editor / OS
 .vscode/
 .idea/
