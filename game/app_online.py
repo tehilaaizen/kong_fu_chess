@@ -9,7 +9,6 @@ from app_support import build_game_window
 from client import client_messages
 from client.network_commands import NetworkCommands
 from client.network_game_adapter import NetworkGameAdapter, decode_snapshot
-from client.server_connection import ServerConnection
 from client.server_event_dispatcher import ServerEventDispatcher
 from client.websocket_connection import WebSocketConnection
 from engine.game_snapshot import GameSnapshot
@@ -37,11 +36,17 @@ def main(username: str, room: str, uri: str = DEFAULT_SERVER_URI) -> None:
     print(f"Connecting to {uri} as '{username}', room '{room}'...")
     connection = WebSocketConnection()
     connection.start(uri)
+    if connection.is_closed():
+        print(f"Could not reach the server at {uri}. Is it running?")
+        return
     connection.send(client_messages.connect(username))
     connection.send(client_messages.join_room(room))
     print("Connected. Waiting for the game to start (leave this running)...")
 
     initial_snapshot, player_names = _await_game_start(connection)
+    if initial_snapshot is None:
+        print("Connection to the server was lost before the game started.")
+        return
     print("Game starting - opening the board...")
 
     board = Board(initial_snapshot.board_width, initial_snapshot.board_height)
@@ -56,12 +61,14 @@ def main(username: str, room: str, uri: str = DEFAULT_SERVER_URI) -> None:
     window.run()
 
 
-def _await_game_start(connection: ServerConnection) -> tuple[GameSnapshot, dict[str, str]]:
-    """Block until the server pairs us into a game, returning the opening
+def _await_game_start(connection: WebSocketConnection) -> tuple[GameSnapshot | None, dict[str, str]]:
+    """Block until the server starts the game, returning the opening
     snapshot and the two players' names for the HUD. game_started names the
-    players; the state_snapshot that follows is the opening board."""
+    players; the state_snapshot that follows is the opening board. Returns
+    (None, names) if the connection drops while waiting, so the caller can
+    report the loss instead of waiting forever."""
     player_names = dict(DEFAULT_PLAYER_NAME_BY_COLOR)
-    while True:
+    while not connection.is_closed():
         for message in connection.poll():
             if message["type"] == "game_started":
                 payload = message["payload"]
@@ -69,6 +76,7 @@ def _await_game_start(connection: ServerConnection) -> tuple[GameSnapshot, dict[
             elif message["type"] == "state_snapshot":
                 return decode_snapshot(message["payload"]), player_names
         time.sleep(HANDSHAKE_POLL_SECONDS)
+    return None, player_names
 
 
 if __name__ == "__main__":

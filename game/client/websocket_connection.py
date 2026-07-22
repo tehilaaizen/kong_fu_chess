@@ -26,14 +26,29 @@ class WebSocketConnection:
         self._inbound: queue.Queue[dict] = queue.Queue()
         self._outbound: queue.Queue[dict] = queue.Queue()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._websocket = None
         self._connected = threading.Event()
+        self._closed = threading.Event()
 
     def start(self, uri: str) -> None:
         """Open the connection on a daemon background thread and block until
-        it is established, so the caller can send() immediately afterward."""
+        it is either established or has failed - so the caller can check
+        is_closed() and then send() immediately afterward."""
         thread = threading.Thread(target=self._run, args=(uri,), daemon=True)
         thread.start()
         self._connected.wait()
+
+    def is_closed(self) -> bool:
+        """Whether the connection has failed to open or has since dropped
+        (the server went away or closed the socket). Lets a caller stop
+        waiting instead of polling a dead link forever."""
+        return self._closed.is_set()
+
+    def close(self) -> None:
+        """Cleanly close the connection from the caller's thread (e.g. on
+        quit), so the server sees the socket go away and can react."""
+        if self._loop is not None and self._websocket is not None:
+            asyncio.run_coroutine_threadsafe(self._websocket.close(), self._loop)
 
     def send(self, message: dict) -> None:
         """Queue one wire frame for delivery to the server (thread-safe)."""
@@ -49,15 +64,24 @@ class WebSocketConnection:
                 return drained
 
     def _run(self, uri: str) -> None:
-        """Own the background event loop for this connection's lifetime."""
+        """Own the background event loop for this connection's lifetime.
+        Whatever happens - a failed connect or a dropped socket - mark the
+        connection closed (and released the start() wait) on the way out."""
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-        self._loop.run_until_complete(self._serve(uri))
+        try:
+            self._loop.run_until_complete(self._serve(uri))
+        except Exception:
+            pass  # connect refused, or the socket dropped - reported via is_closed()
+        finally:
+            self._closed.set()
+            self._connected.set()  # unblock start() even if we never connected
 
     async def _serve(self, uri: str) -> None:
         """Connect, then run the receiver and sender until the socket
         closes."""
         async with websockets.connect(uri) as websocket:
+            self._websocket = websocket
             self._connected.set()
             await asyncio.gather(self._receive(websocket), self._send(websocket))
 
